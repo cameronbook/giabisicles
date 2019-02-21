@@ -22,6 +22,7 @@ get_time_from_plot_file(fname)
 
 from __future__ import division
 import os, subprocess, sys
+import netCDF4
 import numpy as np
 import pickle
 try:
@@ -61,8 +62,8 @@ class TopgFluxBase(object):
         self.fac = fac
         kx = np.fft.fftfreq(nx*fac, self.dx)            # m^-1
         ky = np.fft.fftfreq(ny*fac, self.dy)            # m^-1
-        self.k = 2*np.pi*np.sqrt(kx[None,:]**2 + ky[:,None]**2) 
- 
+        self.k = 2*np.pi*np.sqrt(kx[None,:]**2 + ky[:,None]**2)
+
         # Earth rheology components
         self.u =     ekwargs.get('u', 1e21)             # Pa s
         self.u1 =    ekwargs.get('u1', None)            # Pa s
@@ -125,6 +126,8 @@ class TopgFluxBase(object):
             self.read = self.amrread
         elif read == 'flatten_and_read':
             self.read = self.flatten_and_read
+        elif read == 'netcdf_read':
+            self.read = self.netCDF4_read
         else:
             raise(ValueError, 'read type not understood')
 
@@ -169,6 +172,18 @@ class TopgFluxBase(object):
 
     def ifft2andcrop(self, arr):
         return np.real(np.fft.ifft2(arr))[..., :self.ny, :self.nx]
+
+    def netCDF4_read(self, fname):
+        """Reads a netCDF4 file of Thwaites Glacier input after being interpolated to the square GIA grid
+        """
+        fin = netCDF4.Dataset('MALI/iceload.nc','r') # input file needs to be changed
+        #thk = fin.variables['thickness']
+        #bas = fin.variables['bedTopography']
+        print self.t
+        thk = fin.variables['thk'][self.t,:,:] # how to load at the correct time?
+        bas = fin.variables['bas'][self.t,:,:]
+
+        return thk, bas
 
     def flatten_and_read(self, fname):
         """Reads an AMRfile in fname and flattens it to the coarsest resolution.
@@ -374,11 +389,18 @@ def get_time_from_plot_file(fname):
     return t
 
 if __name__ == '__main__':
-    TMAX = 10
+    TMAX = 300
     test = sys.argv[1]
-    Nx, Ny = int(sys.argv[2]), int(sys.argv[3])
+    #Nx, Ny = int(sys.argv[2]), int(sys.argv[3])
+    #xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
+
+    f = netCDF4.Dataset('MALI/iceload.nc','r')
+    x_data = f.variables['x'][:]
+    y_data = f.variables['y'][:]
+    Nx = len(x_data)
+    Ny = len(y_data)
     xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
-    
+
     # Generate the heaviside load (applied at t=0)
     load = np.zeros((Ny, Nx))
     if test == 'periodic':
@@ -389,8 +411,32 @@ if __name__ == '__main__':
     else:
         raise ValueError('test style not understood')
     # Make the flux object
-    buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), './', 'blah', 'blah', TMAX, 1., {},fac=1)       
+#    buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), './', 'blah', 'blah', TMAX, 1., {},fac=1)
+    print 'x_data', x_data
+    buelerflux = BuelerTopgFlux(x_data, y_data, './', 'blah', 'blah', TMAX, 1., {},fac=1, read='netcdf_read')
+
+    # create a new GIA output file
+    fout = netCDF4.Dataset("uplift_out.nc", "w")
+    fout.createDimension('x', Nx)
+    fout.createDimension('y', Ny)
+    fout.createDimension('Time', size=None) # make unlimited dimension
+    xout = fout.createVariable('x', 'f', ('x',))
+    xout[:] = x_data
+    yout = fout.createVariable('y', 'f', ('y',))
+    yout[:] = y_data
+    tout = fout.createVariable('Time', 'f', ('Time',))
+    tout.units='year'
+    up_out = fout.createVariable('uplift', 'f', ('Time', 'y','x'))
+
+
+
     for i in range(TMAX):
-        # The load is heaviside, so it doesn't change step to step, but the uplift field keeps updating.
-        buelerflux._Udot_from_dLhat(buelerflux.fft2andpad(load))
-        np.savetxt("{0}test_t{1:d}.txt".format(test,i), buelerflux.ifft2andcrop(buelerflux.Uhatn))
+        # The is heaviside, so it doesn't change step to step, but the uplift field keeps updating.
+#        buelerflux._Udot_from_dLhat(buelerflux.fft2andpad(load))
+        buelerflux._update_Udot(i)
+
+        this_uplift = buelerflux.ifft2andcrop(buelerflux.Uhatn)
+        np.savetxt("{0}test_t{1:d}.txt".format(test,i), this_uplift)
+        up_out[i,:,:] = this_uplift
+        tout[i]=i
+    fout.close()
