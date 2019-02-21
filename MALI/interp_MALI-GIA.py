@@ -99,6 +99,7 @@ print 'Gathering coordinate information from input and output files.'
 if options.destination== 'g':
     # get needed info from MPAS file
     MPASfile = netCDF4.Dataset(options.mpasFile,'r')
+    MPASfile.set_auto_mask(False) # this obscure command prevents the netCDF4 module from returning variables as a numpy Masked Array type and ensures they are always plain old ndarrays, which is expected by the interpolation code
     nt = len(MPASfile.dimensions['Time'])
 #    years = MPASfile.variables['daysSinceStart'][:]/365.0
 
