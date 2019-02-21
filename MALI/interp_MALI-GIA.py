@@ -28,9 +28,9 @@ options, args = parser.parse_args()
 
 print "  MPAS file:  " + options.mpasFile
 print "  GIA file:  " + options.giaFile
-if options.destination == 'MALI':
+if options.destination == 'g':
     print "Interpolating ice sheet data from MALI file to a new file on the GIA grid."
-else:
+elif options.destination == 'm':
     print "Interpolating uplift data from GIA file to a new file on the MALI grid."
 
 print '' # make a space in stdout before further output
@@ -108,7 +108,7 @@ if options.destination== 'g':
     #print 'yCell min/max:', yCell.min(), yCell.max()
     nCells = len(MPASfile.dimensions['nCells'])
 
-    # Open the input file, get needed dimensions
+    # Open the gia input file, get needed dimensions
     giaFile = netCDF4.Dataset(options.giaFile,'r')
     nx = len(giaFile.dimensions['x'])
     ny = len(giaFile.dimensions['y'])
