@@ -72,13 +72,13 @@ def delaunay_interp_weights(xy, uv, d=2):
     #print outsideInd
     nExtrap = len(outsideInd[0])
     if nExtrap > 0:
-       print "    Found {} points requiring extrapolation.  Using nearest neighbor extrapolation for those.".format(nExtrap)
+       print "    Found {} points outside of union of domains.".format(nExtrap)
 
     # Now find nearest neighbor for each outside point
     # Use KDTree of input points
-    tree = scipy.spatial.cKDTree(xy)
+    #tree = scipy.spatial.cKDTree(xy)
 
-    return vertices, wts, outsideInd, tree
+    return vertices, wts, outsideInd
 
 #----------------------------
 
@@ -86,16 +86,7 @@ def delaunay_interpolate(values):
     # apply the interpolator
     outfield = np.einsum('nj,nj->n', np.take(values, vtx), wts)
 
-    # Now apply nearest neighbor to points outside convex hull
-    # We could have this enabled/disabled with a command line option, but for now it will always be done.
-    # Note: the barycentric interp applied above could be restricted to the points inside the convex hull
-    # instead of being applied to ALL points as is currently implemented.  However it is assumed that
-    # "redoing" the outside points has a small performance cost because there generally should be few such points
-    # and the implementation is much simpler this way.
-#    outsideCoord = mpasXY[outsideInd,:]
-#    if len(outsideInd) > 0:
-#       dist,idx = tree.query(outsideCoord, k=1)  # k is the number of nearest neighbors.  Could crank this up to 2 (and then average them) with some fiddling, but keeping it simple for now.
-#       outfield[outsideInd] = values.flatten()[idx]  # 2d cism fields need to be flattened. (Note the indices were flattened during init, so this just matches that operation for the field data itself.)  1d mpas fields do not, but the operation won't do anything because they are already flat.
+    outfield[outsideIndx] = 0.0
 
     return outfield
 
@@ -145,7 +136,7 @@ if options.destination== 'g':
     giaXY[:,1] = Xi.flatten()
     # build array form of MPAS x, y
     mpasXY = np.vstack((xCell[:], yCell[:])).transpose()
-    vtx, wts, outsideIndx, tree = delaunay_interp_weights(mpasXY, giaXY)
+    vtx, wts, outsideIndx = delaunay_interp_weights(mpasXY, giaXY)
 
     print "Begin interpolation"
     for t in range(nt):
