@@ -117,7 +117,7 @@ if options.destination== 'g':
     y = giaFile.variables['y'][:]
 
     # create a new GIA output file
-    fout = netCDF4.Dataset("GIAFILE.nc", "w")
+    fout = netCDF4.Dataset("iceload.nc", "w")
     fout.createDimension('x', nx)
     fout.createDimension('y', ny)
     fout.createDimension('Time', size=None) # make unlimited dimension
