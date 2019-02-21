@@ -120,13 +120,15 @@ if options.destination== 'g':
     fout = netCDF4.Dataset("GIAFILE.nc", "w")
     fout.createDimension('x', nx)
     fout.createDimension('y', ny)
-    fout.createDimension('time', size=None) # make unlimited dimension
+    fout.createDimension('Time', size=None) # make unlimited dimension
     xout = fout.createVariable('x', 'f', ('x',))
     xout[:] = x
     yout = fout.createVariable('y', 'f', ('y',))
     yout[:] = y
-    thk = fout.createVariable('thk', 'f', ('time', 'y','x'))
-    bas = fout.createVariable('bas', 'f', ('time', 'y','x'))
+    tout = fout.createVariable('Time', 'f', ('Time',))
+    tout.units='year'
+    thk = fout.createVariable('thk', 'f', ('Time', 'y','x'))
+    bas = fout.createVariable('bas', 'f', ('Time', 'y','x'))
     giaFile.close() # done with this already
 
     print "Creating interpolation object"
@@ -144,6 +146,7 @@ if options.destination== 'g':
         #print "Time {} = year {}".format(t, years[t])
         thk[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['thickness'][t,:]), (ny,nx))
         bas[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['bedTopography'][t,:]), (ny,nx))
+        tout[t] = t
 
 
 
@@ -156,4 +159,3 @@ if options.destination== 'g':
     fout.close()
 
 print '\nInterpolation completed.'
-
