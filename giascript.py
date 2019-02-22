@@ -178,11 +178,10 @@ class TopgFluxBase(object):
         """Reads a netCDF4 file of Thwaites Glacier input after being interpolated to the square GIA grid
         """
         fin = netCDF4.Dataset('MALI/iceload.nc','r') # input file needs to be changed
-        #thk = fin.variables['thickness']
-        #bas = fin.variables['bedTopography']
-        print self.t
+        #print self.t
         thk = fin.variables['thk'][self.t,:,:] # how to load at the correct time?
         bas = fin.variables['bas'][self.t,:,:]
+        fin.close() # TODO: open once instead of every timestep
 
         return thk, bas
 
@@ -389,32 +388,27 @@ def get_time_from_plot_file(fname):
     amrio.free(amrID)
     return t
 
-if __name__ == '__main__':
-    TMAX = 300
-    test = sys.argv[1]
-    #Nx, Ny = int(sys.argv[2]), int(sys.argv[3])
-    #xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
-
+def MALI_driver():
+    '''
+    Function for running GIA model for offline file coupling with MALI
+    '''
+    # Open iceload file interpolated from MALI to GIA grid and get some grid info
     f = netCDF4.Dataset('MALI/iceload.nc','r')
     x_data = f.variables['x'][:]
     y_data = f.variables['y'][:]
     Nx = len(x_data)
     Ny = len(y_data)
     xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
+    nt = len(f.dimensions['Time'])
+    # note: Eventually may want to make the timekeeping more robust.  Right now assuming spacing is always 1 year!
+    dt = 1.0
+    f.close()
 
-    # Generate the heaviside load (applied at t=0)
-    load = np.zeros((Ny, Nx))
-    if test == 'periodic':
-        fx, fy = float(sys.argv[4]), float(sys.argv[5])
-        load = np.cos(xi*fx*2*np.pi/Nx)*np.cos(yj*fy*2*np.pi/Ny)
-    elif test == 'square':
-        load[(xi/Nx > 0.333)*(xi/Nx < 0.666)*(yj/Ny > 0.333) *(yj/Ny<0.666)] = 1.
-    else:
-        raise ValueError('test style not understood')
-    # Make the flux object
-#    buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), './', 'blah', 'blah', TMAX, 1., {},fac=1)
-    print 'x_data', x_data
-    buelerflux = BuelerTopgFlux(x_data, y_data, './', 'blah', 'blah', TMAX, 1., {},fac=1, read='netcdf_read')
+    ekwargs = {'u2'  :  4.e18,
+               'u1'  :  2.e19,
+               'h'   :  200000.,
+               'D'   :  13e23}
+    buelerflux = BuelerTopgFlux(x_data, y_data, './', 'blah', 'blah', TMAX, dt, ekwargs, fac=2, read='netcdf_read')
 
     # create a new GIA output file
     fout = netCDF4.Dataset("uplift_out.nc", "w")
@@ -429,15 +423,36 @@ if __name__ == '__main__':
     tout.units='year'
     up_out = fout.createVariable('uplift', 'f', ('Time', 'y','x'))
 
-
-
-    for i in range(TMAX):
-        # The is heaviside, so it doesn't change step to step, but the uplift field keeps updating.
-#        buelerflux._Udot_from_dLhat(buelerflux.fft2andpad(load))
-        buelerflux._update_Udot(i)
-
-        this_uplift = buelerflux.ifft2andcrop(buelerflux.Uhatn)
-        np.savetxt("{0}test_t{1:d}.txt".format(test,i), this_uplift)
-        up_out[i,:,:] = this_uplift
+    for i in range(nt):
+        print "Starting time step {}".format(i)
+        buelerflux._update_Udot(i)  # this actually runs the GIA model, using the MALI data from the iceload.nc file
+        up_out[i,:,:] = buelerflux.ifft2andcrop(buelerflux.Uhatn)
         tout[i]=i
     fout.close()
+
+    # hard quit to avoid the rest of what's in main()
+    sys.exit()
+
+if __name__ == '__main__':
+    TMAX = 10
+    test = sys.argv[1]
+    if test == 'mali':
+        MALI_driver() # pass control to driver function and skip the remainder of main
+    Nx, Ny = int(sys.argv[2]), int(sys.argv[3])
+    xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
+
+    # Generate the heaviside load (applied at t=0)
+    load = np.zeros((Ny, Nx))
+    if test == 'periodic':
+        fx, fy = float(sys.argv[4]), float(sys.argv[5])
+        load = np.cos(xi*fx*2*np.pi/Nx)*np.cos(yj*fy*2*np.pi/Ny)
+    elif test == 'square':
+        load[(xi/Nx > 0.333)*(xi/Nx < 0.666)*(yj/Ny > 0.333) *(yj/Ny<0.666)] = 1.
+    else:
+        raise ValueError('test style not understood')
+    # Make the flux object
+    buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), './', 'blah', 'blah', TMAX, 1., {},fac=1)
+    for i in range(TMAX):
+        # The is heaviside, so it doesn't change step to step, but the uplift field keeps updating.
+        buelerflux._Udot_from_dLhat(buelerflux.fft2andpad(load))
+        np.savetxt("{0}test_t{1:d}.txt".format(test,i), buelerflux.ifft2andcrop(buelerflux.Uhatn))
