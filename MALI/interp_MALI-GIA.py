@@ -2,6 +2,27 @@
 '''
 Interpolate fields between a MALI grid and a regular grid for GIA calculations
 
+There are two modes of usage, controlled by the -d option:
+
+1. Interpolate ice load history in a MALI output file to the GIA grid to be used
+as input for the GIA model.  In this case, the -m file should be the MALI output file
+containing the 'thickness' and 'bedTopography' fields, and the -g file need only contain
+a description of the GIA grid (but it can also contain other data).
+Invoke like:
+./interp_MALI-GIA.py -d g -m MALI_OUTPUT.nc -g GIA_GRID_DESCRIPTION.nc
+A new file will be generated that contains the time-series of ice thickness and
+bed topography data interpolated onto the GIA grid.
+
+2. Interpolate uplift from a GIA model output file to the MPAS grid and convert to
+a bedrock elevation time-series.  In this case, the -g file should be the GIA model
+output file containing the 'uplift' field, and the -m file should be a MALI file
+that includes the MPAS grid description as well as the initial bedTopography field
+(it's ok if other fields are also present).
+Invoke like:
+./interp_MALI-GIA.py -d m -m MALI_INITIAL_CONDITION.nc -g GIA_OUTPUT.nc
+A new file will be generated that contains the time-series of bed topography
+on the MPAS grid.
+
 '''
 
 import sys
@@ -92,32 +113,73 @@ def delaunay_interpolate(values):
 
 #----------------------------
 
+def copy_mpas_mesh_vars(filein, fileout):
+# ============================================
+# Copy over all of the required dimensions to the new file
+# ============================================
+   dims2copy = ['nCells', 'nEdges', 'nVertices', 'TWO', 'vertexDegree', 'maxEdges', 'maxEdges2']
+   for dimname in dims2copy:
+       fileout.createDimension(dimname, filein.dimensions[dimname])
+   if not "StrLen" in fileout.dimensions:
+       fileout.createDimension("StrLen", 64)
+
+# ============================================
+# Copy over all of the required grid variables to the new file
+# ============================================
+   #print "Beginning to copy mesh variables to output file."
+   vars2copy = ['latCell', 'lonCell', 'xCell', 'yCell', 'zCell', 'indexToCellID', 'latEdge', 'lonEdge', 'xEdge', 'yEdge', 'zEdge', 'indexToEdgeID', 'latVertex', 'lonVertex', 'xVertex', 'yVertex', 'zVertex', 'indexToVertexID', 'cellsOnEdge', 'nEdgesOnCell', 'nEdgesOnEdge', 'edgesOnCell', 'edgesOnEdge', 'weightsOnEdge', 'dvEdge', 'dcEdge', 'angleEdge', 'areaCell', 'areaTriangle', 'cellsOnCell', 'verticesOnCell', 'verticesOnEdge', 'edgesOnVertex', 'cellsOnVertex', 'kiteAreasOnVertex']
+   # Add these optional fields if they exist in the input file
+   #for optionalVar in ['meshDensity', 'gridSpacing', 'cellQuality', 'triangleQuality', 'triangleAngleQuality', 'obtuseTriangle']:
+   #   if optionalVar in filein.variables:
+   #      vars2copy.append(optionalVar)
+
+   #for varname in vars2copy:
+   #   print "-",
+   #print "|"
+   for varname in vars2copy:
+      thevar = filein.variables[varname]
+      datatype = thevar.dtype
+      newVar = fileout.createVariable(varname, datatype, thevar.dimensions)
+      newVar[:] = thevar[:]
+      del newVar, thevar
+      #sys.stdout.write("* "); sys.stdout.flush()
+   fileout.sync()
+   print "|"
+   print "Finished copying mesh variables to output file.\n"
+# ------------
+
+
 print "=================="
 print 'Gathering coordinate information from input and output files.'
 
+# get needed info from MPAS file
+MPASfile = netCDF4.Dataset(options.mpasFile,'r')
+MPASfile.set_auto_mask(False) # this obscure command prevents the netCDF4 module from returning variables as a numpy Masked Array type and ensures they are always plain old ndarrays, which is expected by the interpolation code
+xCell = MPASfile.variables['xCell'][:]
+#print 'xCell min/max:', xCell.min(), xCell.max()
+yCell = MPASfile.variables['yCell'][:]
+#print 'yCell min/max:', yCell.min(), yCell.max()
+nCells = len(MPASfile.dimensions['nCells'])
+# build array form of MPAS x, y
+mpasXY = np.vstack((xCell[:], yCell[:])).transpose()
 
+# Open the gia input file, get needed dimensions
+giaFile = netCDF4.Dataset(options.giaFile,'r')
+nx = len(giaFile.dimensions['x'])
+ny = len(giaFile.dimensions['y'])
+x = giaFile.variables['x'][:]
+y = giaFile.variables['y'][:]
+# build array form of GIA grid x, y
+[Yi,Xi] = np.meshgrid(x[:], y[:])
+giaXY = np.zeros([Xi.shape[0]*Xi.shape[1],2])
+giaXY[:,0] = Yi.flatten()
+giaXY[:,1] = Xi.flatten()
+
+
+# ==========================
 if options.destination== 'g':
-    # get needed info from MPAS file
-    MPASfile = netCDF4.Dataset(options.mpasFile,'r')
-    MPASfile.set_auto_mask(False) # this obscure command prevents the netCDF4 module from returning variables as a numpy Masked Array type and ensures they are always plain old ndarrays, which is expected by the interpolation code
-    nt = len(MPASfile.dimensions['Time'])
-#    years = MPASfile.variables['daysSinceStart'][:]/365.0
-
-    xCell = MPASfile.variables['xCell'][:]
-    #print 'xCell min/max:', xCell.min(), xCell.max()
-    yCell = MPASfile.variables['yCell'][:]
-    #print 'yCell min/max:', yCell.min(), yCell.max()
-    nCells = len(MPASfile.dimensions['nCells'])
-
-    # Open the gia input file, get needed dimensions
-    giaFile = netCDF4.Dataset(options.giaFile,'r')
-    nx = len(giaFile.dimensions['x'])
-    ny = len(giaFile.dimensions['y'])
-    x = giaFile.variables['x'][:]
-    y = giaFile.variables['y'][:]
-
     # create a new GIA output file
-    fout = netCDF4.Dataset("iceload.nc", "w")
+    fout = netCDF4.Dataset("GIAFILE.nc", "w")
     fout.createDimension('x', nx)
     fout.createDimension('y', ny)
     fout.createDimension('Time', size=None) # make unlimited dimension
@@ -129,28 +191,18 @@ if options.destination== 'g':
     tout.units='year'
     thk = fout.createVariable('thk', 'f', ('Time', 'y','x'))
     bas = fout.createVariable('bas', 'f', ('Time', 'y','x'))
-    giaFile.close() # done with this already
 
     print "Creating interpolation object"
-    # build array form of GIA grid x, y
-    [Yi,Xi] = np.meshgrid(x[:], y[:])
-    giaXY = np.zeros([Xi.shape[0]*Xi.shape[1],2])
-    giaXY[:,0] = Yi.flatten()
-    giaXY[:,1] = Xi.flatten()
-    # build array form of MPAS x, y
-    mpasXY = np.vstack((xCell[:], yCell[:])).transpose()
     vtx, wts, outsideIndx = delaunay_interp_weights(mpasXY, giaXY)
 
     print "Begin interpolation"
+    nt = len(MPASfile.dimensions['Time'])
+    years = MPASfile.variables['daysSinceStart'][:]/365.0
     for t in range(nt):
         #print "Time {} = year {}".format(t, years[t])
         thk[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['thickness'][t,:]), (ny,nx))
         bas[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['bedTopography'][t,:]), (ny,nx))
         tout[t] = t
-
-
-
-    MPASfile.close() # done with this
 
     # Update history attribute of netCDF file
     thiscommand = datetime.now().strftime("%a %b %d %H:%M:%S %Y") + ": " + " ".join(sys.argv[:])
@@ -158,4 +210,39 @@ if options.destination== 'g':
 
     fout.close()
 
+# ==========================
+if options.destination == 'm':
+
+    # create a new file for uplift/bed topo on the MPAS grid
+    fout = netCDF4.Dataset("uplift_mpas.nc", "w")
+    copy_mpas_mesh_vars(MPASfile, fout)
+    fout.createDimension('Time', size=None) # make unlimited dimension
+    tout = fout.createVariable('Time', 'f', ('Time',))
+    tout.units='year'
+    xtime = fout.createVariable('xtime', 'c', ('Time', 'StrLen'))
+    bedTopo = fout.createVariable('bedTopography', 'f', ('Time', 'nCells'))
+
+    print "Creating interpolation object"
+    vtx, wts, outsideIndx = delaunay_interp_weights(giaXY, mpasXY)
+
+    print "Begin interpolation"
+    nt = len(giaFile.dimensions['Time'])
+    years = giaFileile.variables['Time'][:]
+    bedTopoBase = MPASfile.variables['bedTopography'][0,:]  # Note using the 0 time level from the MPAS file!
+    for t in range(nt):
+        #print "Time {} = year {}".format(t, years[t])
+        bedTopo[t,:] = delaunay_interpolate(giaFile.variables['uplift'][t,:]) + bedTopoBase
+        tout[t] = t
+        xtime[t,:] = list("{:4d}-01-01_00:00:00".format(t).ljust(64))
+
+    # Update history attribute of netCDF file
+    thiscommand = datetime.now().strftime("%a %b %d %H:%M:%S %Y") + ": " + " ".join(sys.argv[:])
+    setattr(fout, 'history', thiscommand )
+
+    fout.close()
+
+MPASfile.close()
+giaFile.close()
+
 print '\nInterpolation completed.'
+
