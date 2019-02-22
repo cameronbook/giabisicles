@@ -29,6 +29,7 @@ import sys
 import numpy as np
 import netCDF4
 from optparse import OptionParser
+import argparse
 import math
 from collections import OrderedDict
 import scipy.spatial
@@ -37,15 +38,28 @@ from datetime import datetime
 
 
 print "== Gathering information.  (Invoke with --help for more details. All arguments are optional)\n"
-parser = OptionParser()
+#parser = OptionParser()
+#parser.description = __doc__
+#parser.add_option("-m", "--mpas", dest="mpasFile", help="name of MPAS file", default="landice_grid.nc", metavar="FILENAME")
+#parser.add_option("-g", "--gia", dest="giaFile", help="name of GIA file", default="gia_grid.nc", metavar="FILENAME")
+#parser.add_option("-d", "--destination", dest="destination", type="choice", choices=('m','g'), help="flag to indicate if the MALI grid or the GIA grid is the destination: 'g' or 'm'.  Required.", metavar="DESTINATION")
+#for option in parser.option_list:
+#    if option.default != ("NO", "DEFAULT"):
+#        option.help += (" " if option.help else "") + "[default: %default]"
+#options, args = parser.parse_args()
+
+parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.description = __doc__
-parser.add_option("-m", "--mpas", dest="mpasFile", help="name of MPAS file", default="landice_grid.nc", metavar="FILENAME")
-parser.add_option("-g", "--gia", dest="giaFile", help="name of GIA file", default="gia_grid.nc", metavar="FILENAME")
-parser.add_option("-d", "--destination", dest="destination", type="choice", choices=('m','g'), help="flag to indicate if the MALI grid or the GIA grid is the destination: 'g' or 'm'.  Required.", metavar="DESTINATION")
-for option in parser.option_list:
-    if option.default != ("NO", "DEFAULT"):
-        option.help += (" " if option.help else "") + "[default: %default]"
-options, args = parser.parse_args()
+parser.add_argument("-d", "--destination", dest="destination", choices=('m','g'), help="flag to indicate if the MALI grid or the GIA grid is the destination: 'g' or 'm'.  Required.", metavar="DESTINATION")
+parser.add_argument("-m", "--mpas", dest="mpasFile", help="name of MPAS file", default="landice_grid.nc", metavar="FILENAME")
+parser.add_argument("-g", "--gia", dest="giaFile", help="name of GIA file", default="gia_grid.nc", metavar="FILENAME")
+#for option in parser.option_list:
+#    if option.default != ("NO", "DEFAULT"):
+#        option.help += (" " if option.help else "") + "[default: %default]"
+options = parser.parse_args()
+
+
+
 
 print "  MPAS file:  " + options.mpasFile
 print "  GIA file:  " + options.giaFile
