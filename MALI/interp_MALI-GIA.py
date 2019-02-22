@@ -77,11 +77,13 @@ print '' # make a space in stdout before further output
 #----------------------------
 #----------------------------
 
-def delaunay_interp_weights(xy, uv, d=2):
+def delaunay_interp_weights(xy, uv, exteriorThreshold=None):
     '''
     xy = input x,y coords
     uv = output x,y coords
     '''
+
+    d = 2 # number of dims
 
     if xy.shape[0] > 2**24-1:
        print "WARNING: The source file contains more than 2^24-1 (16,777,215) points due to a limitation in older versions of Qhull (see: https://mail.scipy.org/pipermail/scipy-user/2015-June/036598.html).  Delaunay creation may fail if Qhull being linked by scipy.spatial is older than v2015.0.1 2015/8/31."
@@ -101,17 +103,24 @@ def delaunay_interp_weights(xy, uv, d=2):
     wts = np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
 
     # Now figure out if there is any extrapolation.
-    # Find indices to points of output file that are outside of convex hull of input points
-    outsideInd = np.nonzero(tri.find_simplex(uv)<0)
-    outsideCoords = uv[outsideInd]
-    #print outsideInd
+    # ---
+    print "    Removing points outside of the union of the two meshes."
+    # Always exclude points outside of convex hull
+    outsideMask = tri.find_simplex(uv) < 0
+
+    # Also optionally add points that are inside the convex hull but greater than a certain distance to any source points
+    # (This operation is slow, but I'm not sure how else to do it.
+    #  Also, this is not exact - some oustide points will sneak in, but they will be very close to the source mesh boundaries.)
+    if exteriorThreshold is not None:
+        for i in np.nonzero(outsideMask==0)[0]:
+            if (((uv[i,0] - xy[:,0])**2 + (uv[i,1] - xy[:,1])**2)**0.5).min() > exteriorThreshold:
+               outsideMask[i] = 1
+
+    outsideInd = np.nonzero(outsideMask)
+
     nExtrap = len(outsideInd[0])
     if nExtrap > 0:
        print "    Found {} points outside of union of domains.".format(nExtrap)
-
-    # Now find nearest neighbor for each outside point
-    # Use KDTree of input points
-    #tree = scipy.spatial.cKDTree(xy)
 
     return vertices, wts, outsideInd
 
@@ -212,7 +221,8 @@ if options.destination== 'g':
     bas = fout.createVariable('bas', 'f', ('Time', 'y','x'))
 
     print "Creating interpolation object"
-    vtx, wts, outsideIndx = delaunay_interp_weights(mpasXY, giaXY)
+    maxDist = MPASfile.variables['dcEdge'][:].max() / 2.0
+    vtx, wts, outsideIndx = delaunay_interp_weights(mpasXY, giaXY, maxDist)
 
     print "Begin interpolation"
     nt = len(MPASfile.dimensions['Time'])
