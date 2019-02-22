@@ -133,7 +133,7 @@ def copy_mpas_mesh_vars(filein, fileout):
 # ============================================
    dims2copy = ['nCells', 'nEdges', 'nVertices', 'TWO', 'vertexDegree', 'maxEdges', 'maxEdges2']
    for dimname in dims2copy:
-       fileout.createDimension(dimname, filein.dimensions[dimname])
+       fileout.createDimension(dimname, len(filein.dimensions[dimname]))
    if not "StrLen" in fileout.dimensions:
        fileout.createDimension("StrLen", 64)
 
@@ -157,6 +157,11 @@ def copy_mpas_mesh_vars(filein, fileout):
       newVar[:] = thevar[:]
       del newVar, thevar
       #sys.stdout.write("* "); sys.stdout.flush()
+   # add some needed attributes
+   fileout.on_a_sphere = "NO"
+   fileout.sphere_radius = 0.0
+   fileout.is_periodic = "NO"
+   # write out the mesh to file before proceeding
    fileout.sync()
    print "|"
    print "Finished copying mesh variables to output file.\n"
@@ -193,7 +198,7 @@ giaXY[:,1] = Xi.flatten()
 # ==========================
 if options.destination== 'g':
     # create a new GIA output file
-    fout = netCDF4.Dataset("GIAFILE.nc", "w")
+    fout = netCDF4.Dataset("iceload.nc", "w")
     fout.createDimension('x', nx)
     fout.createDimension('y', ny)
     fout.createDimension('Time', size=None) # make unlimited dimension
@@ -239,20 +244,21 @@ if options.destination == 'm':
     tout = fout.createVariable('Time', 'f', ('Time',))
     tout.units='year'
     xtime = fout.createVariable('xtime', 'c', ('Time', 'StrLen'))
-    bedTopo = fout.createVariable('bedTopography', 'f', ('Time', 'nCells'))
+    bedTopo = fout.createVariable('bedTopography', 'd', ('Time', 'nCells'))
 
     print "Creating interpolation object"
     vtx, wts, outsideIndx = delaunay_interp_weights(giaXY, mpasXY)
 
-    print "Begin interpolation"
     nt = len(giaFile.dimensions['Time'])
-    years = giaFileile.variables['Time'][:]
+    years = giaFile.variables['Time'][:]
     bedTopoBase = MPASfile.variables['bedTopography'][0,:]  # Note using the 0 time level from the MPAS file!
+    print "Base bedTopography min={}, max={}".format(bedTopoBase.min(), bedTopoBase.max())
+    print "Begin interpolation"
     for t in range(nt):
-        #print "Time {} = year {}".format(t, years[t])
+        print "   Time {} = year {}".format(t, years[t])
         bedTopo[t,:] = delaunay_interpolate(giaFile.variables['uplift'][t,:]) + bedTopoBase
         tout[t] = t
-        xtime[t,:] = list("{:4d}-01-01_00:00:00".format(t).ljust(64))
+        xtime[t,:] = list("{0:04d}-01-01_00:00:00".format(t).ljust(64))
 
     # Update history attribute of netCDF file
     thiscommand = datetime.now().strftime("%a %b %d %H:%M:%S %Y") + ": " + " ".join(sys.argv[:])
