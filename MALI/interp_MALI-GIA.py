@@ -248,7 +248,7 @@ if options.destination== 'g':
 if options.destination == 'm':
 
     # create a new file for uplift/bed topo on the MPAS grid
-    fout = netCDF4.Dataset("uplift_mpas.nc", "w")
+    fout = netCDF4.Dataset("uplift_mpas.nc", "w", format="NETCDF3_CLASSIC")
     copy_mpas_mesh_vars(MPASfile, fout)
     fout.createDimension('Time', size=None) # make unlimited dimension
     tout = fout.createVariable('Time', 'f', ('Time',))
@@ -280,4 +280,3 @@ MPASfile.close()
 giaFile.close()
 
 print '\nInterpolation completed.'
-
