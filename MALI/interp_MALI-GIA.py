@@ -211,7 +211,12 @@ if options.destination== 'g':
 
     print "Begin interpolation"
     nt = len(MPASfile.dimensions['Time'])
-    years = MPASfile.variables['daysSinceStart'][:]/365.0
+    if 'daysSinceStart' in MPASfile.variables:
+       years = MPASfile.variables['daysSinceStart'][:]/365.0
+    else:
+       # could use xtime if available...
+       years = np.arange(nt)
+       print "NOTE: No 'daysSinceStart' variable found.  Assuming that time levels represent integer years."
     for t in range(nt):
         #print "Time {} = year {}".format(t, years[t])
         thk[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['thickness'][t,:]), (ny,nx))
