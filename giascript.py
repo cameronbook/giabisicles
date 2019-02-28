@@ -430,10 +430,21 @@ def get_time_from_plot_file(fname):
     amrio.free(amrID)
     return t
 
-def MALI_driver():
+def MALI_driver(maliRestart):
     '''
     Function for running GIA model for offline file coupling with MALI
     '''
+    if maliRestart:
+        # this is a restart from a previous GIA run, so load needed restart info
+        fr = netCDF4.Dataset('gia_restart_data.nc','r')
+        # TODO: check size matches size used below
+        Uhatn_restart = fr.variables['Uhatn'][:]
+        taf0hat_restart = fr.variables['taf0hat'][:]
+        fr.close()
+    else:
+        Uhatn_restart = None
+        taf0hat_restart = None
+
     # Open iceload file interpolated from MALI to GIA grid and get some grid info
     f = netCDF4.Dataset('MALI/iceload.nc','r')
     x_data = f.variables['x'][:]
@@ -450,7 +461,7 @@ def MALI_driver():
                'u1'  :  2.e19,
                'h'   :  200000.,
                'D'   :  13e23}
-    buelerflux = BuelerTopgFlux(x_data, y_data, './', 'blah', 'blah', TMAX, dt, ekwargs, fac=2, read='netcdf_read')
+    buelerflux = BuelerTopgFlux(x_data, y_data, './', 'blah', 'blah', TMAX, dt, ekwargs, fac=2, read='netcdf_read', U0=Uhatn_restart, taf0=taf0hat_restart)
 
     # create a new GIA output file
     fout = netCDF4.Dataset("uplift_out.nc", "w")
@@ -470,7 +481,22 @@ def MALI_driver():
         buelerflux._update_Udot(i)  # this actually runs the GIA model, using the MALI data from the iceload.nc file
         up_out[i,:,:] = buelerflux.ifft2andcrop(buelerflux.Uhatn)
         tout[i]=i
+
     fout.close()
+
+    # Always write a restart file, clobbering previous one
+    fr = netCDF4.Dataset('gia_restart_data.nc','w')
+    fr.createDimension('x', Nx)
+    fr.createDimension('y', Ny)
+    xout = fr.createVariable('x', 'f', ('x',))
+    xout[:] = x_data
+    yout = fr.createVariable('y', 'f', ('y',))
+    yout[:] = y_data
+    Uhatn_restartVar = fout.createVariable('Uhatn', 'f', ('y','x'))
+    Uhatn_restartVar[:] = buelerflux.ifft2andcrop(buelerflux.Uhatn)
+    taf0hat_restartVar = fout.createVariable('taf0hat', 'f', ('y','x'))
+    taf0hat_restartVar[:] = buelerflux.ifft2andcrop(buelerflux.taf0hat)
+    fr.close()
 
     # hard quit to avoid the rest of what's in main()
     sys.exit()
@@ -481,7 +507,11 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         test = sys.argv[1]
         if test == 'mali':
-           MALI_driver() # pass control to driver function and skip the remainder of main
+           if len(sys.argv) > 2 and sys.argv[2] == 'r':
+               maliRestart=True
+           else:
+               maliRestart=False
+           MALI_driver(maliRestart) # pass control to driver function and skip the remainder of main
 
         Nx, Ny = int(sys.argv[2]), int(sys.argv[3])
         xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
