@@ -104,14 +104,16 @@ for i in $(seq 1 $niter); do
 
    # interpolate bed topo to MALI grid
    $GIAPATH/interp_MALI-GIA.py -d m -m $MALI_INPUT -g $GIAOUTPUT
-   cp uplift_mpas.nc uplift_mpas.nc.iter${i}
+   cp bedtopo_update_mpas.nc bedtopo_update_mpas.nc.iter${i}
 
    # Stick new bed topo into restart file
    # (could also input it as a forcing file... not sure which is better)
-   RSTTIME=`head -c 17 restart_timestamp | tail -c 16`
+   RSTTIME=`head -c 20 restart_timestamp | tail -c 19 | tr : .`
    RSTFILE=restart.$RSTTIME.nc
+   echo restart time=$RSTTIME
+   echo restart filename=$RSTFILE
    cp $RSTFILE $RSTFILE.bak.iter${i}  # back up first (maybe remove later)
-   ncks -A -v bedTopography uplift_mpas.nc $RSTFILE
+   ncks -A -v bedTopography bedtopo_update_mpas.nc $RSTFILE
 
    echo "Finished iteration $i"
 done;
