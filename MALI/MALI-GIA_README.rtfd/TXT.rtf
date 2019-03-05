@@ -1,0 +1,47 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1671\cocoasubrtf200
+{\fonttbl\f0\fswiss\fcharset0 Helvetica-Bold;\f1\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww19200\viewh13680\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\b\fs28 \cf0 README for Iteration Sequence between MALI and Sam\'92s planar GIA model (giascript.py).\
+
+\f1\b0 \
+\pard\pardeftab720\qj\partightenfactor0
+\cf0 Since the two models utilize different grid geometries, the first step in the iteration process \
+is to create a rectangular grid from the MALI grid. This is accomplished via the script\
+ \'93create_GIA_domain.py\'94 (invoked like: create_GIA_domain.py -m MALI_GRID.nc -g GIA_GRID.nc), \
+and results in a file called \'93gia_grid.nc\'94. Here, the MALI grid can be any appropriate initial\
+condition file that contains the necessary mesh information (e.g. \'93thwaites.4km.cleaned.nc\'94 or \
+\'93ais20km.150910.nc\'94), and the GIA grid can be called whatever one wishes. \
+\
+The next step in the iteration process (after generating a GIA grid from a MALI grid) is\
+to interpolate the necessary data fields from a MALI control run (i.e. no GIA/bedrock uplift;\
+onto the GIA grid. This is done by using the \'93interp_MALI-GIA.py\'94 script \
+(invoked like: interp_MALI-GIA.py -d g -m MALI_OUTPUT.nc -g GIA_GRID.nc). \
+Here, \'93-d g\'94 designates that we are interpolating from MALI to GIA, \'94-m\'94 indicates the \
+MALI control run (w/out uplift; \'93output.nouplift.nc\'94 in our case), and \'93-g\'94 designates the \
+GIA grid onto which one wants to interpolate. This results in a file called \'93iceload_iter0.nc\'94.\
+\
+\
+With these fields now interpolated onto the GIA grid, one can now run the GIA model in order \
+to compute the resulting change in bedrock topography due to the viscoelastic lithospheric \
+response to the changing ice sheet thickness. Run the GIA model using \'93mali-gia-driver.py\'94, \
+(invoked like: mali-gia-driver.py), ensuring that the script calls the correct \'93ice_load.nc\'94 file (line 54).\
+\
+The resultant uplift field on the GIA grid (called \'93uplift_GIA_iter0.nc\'94) from the previous step is \
+then interpolated back onto the MALI grid \
+(invoke like: interp_MALI-GIA.py -d m -m MALI_INITIAL_CONDITION.nc -g GIA_OUTPUT.nc). \
+Here, the -g file should be the GIA model output file containing the 'uplift' field \
+(e.g. \'93uplift_GIA_iter0.nc\'94), and the -m file should be a MALI file that includes the MPAS grid\
+description as well as the initial bedTopography field (e.g. \'93thwaites.4km.cleaned.nc\'94). \
+This creates a file called \'93uplift_MPAS_iter0.nc\'94. This uplift time series is then fed to MALI as a \
+forcing function (online, in the streams.landice file) in order to calculate the new ice thickness\
+ time series (among all other MALI outputs). This run of MALI will generate a new output file \
+(\'93output.iter0.nc\'94) that contains the updated ice sheet thickness time series, which should then\
+ be interpolated onto the GIA grid (creating \'93iceload_iter1.nc\'94) and then run through the GIA\
+ model to generate a new ice load (\'93uplift_GIA_iter1.nc\'94) which is then interpolated back onto\
+ the MALI grid (creating \'93uplift_MPAS_iter1.nc\'94) and finally, run online with MALI. The entire \
+process can be repeated ad infinitum,or until convergence in the uplift field is achieved.}
