@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-#SBATCH --time=0:30:00   # walltime
+#SBATCH --time=16:00:00   # walltime
 #SBATCH --nodes=1   # number of nodes
 ##SBATCH --account=w19_icesheetfreshwater   # account name
-#SBATCH --qos=interactive
+#SBATCH --qos=standard
 #SBATCH --job-name=MALI-GIA   # job name
 
 # Script to alternately run MALI and GIA in a data-coupled fashion.
@@ -26,19 +26,19 @@
 
 # ===================
 # Set these locations and vars
-GIAPATH=/usr/projects/climate/mhoffman/mpas/giabisicles/MALI
+GIAPATH=~/giabisicles/MALI
 MALI=./landice_model
 
 MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output.nc
 MALI_NL=namelist.landice
-niter=3 # number of iterations
+niter=20 # number of iterations
 # ==================
 
 # Other things you could change
 GIAGRID=gia_grid.nc
-MALILOAD=mali_load.nc
-GIAOUTPUT=uplift_out.nc
+MALILOAD=mali_load
+GIAOUTPUT=uplift_out
 
 
 source /users/mhoffman/setup_badger_mods.20181206.sh
@@ -91,20 +91,20 @@ for i in $(seq 1 $niter); do
 
    # interpolate ice load to GIA grid
    # copy second to last time of the needed fields.  This represents the prior year.
-   ncks -A -d Time,-2 -v thickness,bedTopography,$meshvars $MALI_OUTPUT $MALILOAD
-   cp $MALILOAD ${MALILOAD}.iteri${i}
-   $GIAPATH/interp_MALI-GIA.py -d g -m $MALILOAD -g $GIAGRID
-   cp iceload.nc iceload.nc.iter${i}
+   ncks -A -d Time,-2 -v thickness,bedTopography,$meshvars $MALI_OUTPUT $MALILOAD.nc
+   cp $MALILOAD.nc ${MALILOAD}.iter${i}.nc
+   $GIAPATH/interp_MALI-GIA.py -d g -m $MALILOAD.nc -g $GIAGRID
+   cp iceload.nc iceload.iter${i}.nc
 
    # Run GIA model
    echo "Starting GIA model"
    $GIAPATH/mali-gia-driver.py $GIAARGS
-   cp $GIAOUTPUT ${GIAOUTPUT}.iter${i}
+   cp $GIAOUTPUT.nc ${GIAOUTPUT}.iter${i}.nc
    echo "Finished GIA model"
 
    # interpolate bed topo to MALI grid
-   $GIAPATH/interp_MALI-GIA.py -d m -m $MALI_INPUT -g $GIAOUTPUT
-   cp bedtopo_update_mpas.nc bedtopo_update_mpas.nc.iter${i}
+   $GIAPATH/interp_MALI-GIA.py -d m -m $MALI_INPUT -g $GIAOUTPUT.nc
+   cp bedtopo_update_mpas.nc bedtopo_update_mpas.iter${i}.nc
 
    # Stick new bed topo into restart file
    # (could also input it as a forcing file... not sure which is better)
@@ -112,7 +112,7 @@ for i in $(seq 1 $niter); do
    RSTFILE=restart.$RSTTIME.nc
    echo restart time=$RSTTIME
    echo restart filename=$RSTFILE
-   cp $RSTFILE $RSTFILE.bak.iter${i}  # back up first (maybe remove later)
+   cp $RSTFILE $RSTFILE.iter${i}.bak  # back up first (maybe remove later)
    ncks -A -v bedTopography bedtopo_update_mpas.nc $RSTFILE
 
    echo "Finished iteration $i"
