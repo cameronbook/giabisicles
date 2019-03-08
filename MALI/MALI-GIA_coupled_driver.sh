@@ -32,13 +32,9 @@ MALI=./landice_model
 MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output.nc
 MALI_NL=namelist.landice
-<<<<<<< HEAD
 niter=20 # number of iterations
-=======
-niter=3 # number of iterations
 
-RESTART_RUN=0  # should be 0 or 1
->>>>>>> 294720617cff46b00a976f2e224c5b4045045a0a
+RESTART_RUN=0 # should be 0 or 1
 # ==================
 
 # Other things you could change
