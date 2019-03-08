@@ -33,6 +33,8 @@ MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output.nc
 MALI_NL=namelist.landice
 niter=3 # number of iterations
+
+RESTART_RUN=0  # should be 0 or 1
 # ==================
 
 # Other things you could change
@@ -52,14 +54,7 @@ for i in $(seq 1 $niter); do
    echo "Starting iteration $i"; echo ""; echo ""
 
    # Check if initial run or restart
-   #   TODO: Need to also check if this script is a restart itself
-   if [ $i -eq 1 ]; then
-      INITIAL=true
-   else
-      INITIAL=false
-   fi
-
-   if [ $INITIAL = "true" ]; then
+   if [ $i -eq 1 ] && [ $RESTART_RUN -eq 0 ]; then
       echo "This is the first iteration of a new simulation: Preparing new run."
 
       # Set up GIA mesh
