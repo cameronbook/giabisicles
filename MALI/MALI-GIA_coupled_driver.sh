@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-#SBATCH --time=16:00:00   # walltime
+#SBATCH --time=01:00:00   # walltime
 #SBATCH --nodes=1   # number of nodes
 ##SBATCH --account=w19_icesheetfreshwater   # account name
-#SBATCH --qos=standard
+##SBATCH --qos=standard
+#SBATCH --qos=interactive
 #SBATCH --job-name=MALI-GIA   # job name
 
 # Script to alternately run MALI and GIA in a data-coupled fashion.
 # There are assumptions of a one year coupling interval.
-# 
+#
 # Workflow is like:
-# 
+#
 # 0       1       2
 # | MALI  |
 # |------>|
@@ -32,7 +33,7 @@ MALI=./landice_model
 MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output.nc
 MALI_NL=namelist.landice
-niter=20 # number of iterations
+end_yr=300
 
 RESTART_RUN=0 # should be 0 or 1
 # ==================
@@ -47,7 +48,19 @@ source /users/mhoffman/setup_badger_mods.20181206.sh
 meshvars="latCell,lonCell,xCell,yCell,zCell,indexToCellID,latEdge,lonEdge,xEdge,yEdge,zEdge,indexToEdgeID,latVertex,lonVertex,xVertex,yVertex,zVertex,indexToVertexID,cellsOnEdge,nEdgesOnCell,nEdgesOnEdge,edgesOnCell,edgesOnEdge,weightsOnEdge,dvEdge,dcEdge,angleEdge,areaCell,areaTriangle,cellsOnCell,verticesOnCell,verticesOnEdge,edgesOnVertex,cellsOnVertex,kiteAreasOnVertex"
 
 
-for i in $(seq 1 $niter); do
+if [ $RESTART_RUN -eq 1 ]; then
+  RSTTIME=`head -c 20 restart_timestamp | tail -c 19`
+  RSTYR=`echo $RSTTIME|head -c 4`
+  echo RSTYR=$RSTYR
+  startyear=`python -c "newyr=int('$RSTYR'); print '{0:04d}'.format(newyr-1)"`
+  echo startyear=$startyear
+  echo " $startyear-01-01_00:00:00" > restart_timestamp
+else
+  startyear=0
+fi
+
+
+for i in $(seq $startyear $end_yr); do
 
    echo ""; echo ""
    echo "=================================================="
@@ -107,12 +120,16 @@ for i in $(seq 1 $niter); do
    RSTFILE=restart.$RSTTIME.nc
    echo restart time=$RSTTIME
    echo restart filename=$RSTFILE
-   cp $RSTFILE $RSTFILE.iter${i}.bak  # back up first (maybe remove later)
+
+   if [ $RESTART_RUN -eq 1 ]; then
+     let jj=${i}+1
+     cp $RSTFILE $RSTFILE.iter${jj}.bak  # back up first (maybe remove later)
+   else
+     cp $RSTFILE $RSTFILE.iter${i}.bak  # back up first (maybe remove later)
+   fi
+
    ncks -A -v bedTopography bedtopo_update_mpas.nc $RSTFILE
 
    echo "Finished iteration $i"
+
 done;
-
-
-
-
