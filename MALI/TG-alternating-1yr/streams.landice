@@ -1,0 +1,82 @@
+<streams>
+
+<immutable_stream name="basicmesh"
+                  type="none"
+                  filename_template="not-to-be-used.nc"/>
+
+<immutable_stream name="input"
+                  type="input"
+                  filename_template="thwaites.4km.cleaned.nc"
+                  input_interval="initial_only"/>
+
+<!--
+<stream name="input2"
+                  type="input"
+                  filename_template="strongThinningSMB.nc"
+                  input_interval="initial_only">
+<var name="sfcMassBal"/>
+</stream>
+-->
+
+<immutable_stream name="restart"
+                  type="input;output"
+                  filename_template="restart.$Y-$M-$D_$h.$m.$s.nc"
+                  filename_interval="output_interval"
+                  precision="double"
+                  clobber_mode="replace_files"
+                  input_interval="initial_only"
+                  reference_time="0000-01-01_00:00:00"
+                  output_interval="0001-00-00_00:00:00"/>
+
+<stream name="globalStatsOutput" 
+        type="output"
+        filename_template="globalStats.nc"
+        filename_interval="none"
+        clobber_mode="overwrite"
+        reference_time="0000-01-01_00:00:00"
+        output_interval="0000-00-01_00:00:00"
+        packages="globalStatsAMPKG"
+        runtime_format="single_file">
+
+    <stream name="globalStatsOutput"/>
+    <var name="daysSinceStart"/>
+    <var name="xtime"/>
+    <var name="deltat"/>
+    <var name="allowableDtACFL"/>
+    <var name="allowableDtDCFL"/>
+    <var_struct name="globalStatsAM"/>
+
+</stream>
+
+<stream name="output"
+        type="output"
+        filename_template="output.nc"
+        filename_interval="500-00-00_00:00:00"
+        precision="double"
+        reference_time="0000-01-01_00:00:00"
+        clobber_mode="overwrite"
+        output_interval="0001-00-00_00:00:00">
+
+    <stream name="basicmesh"/>
+    <var name="xtime"/>
+    <var name="thickness"/>
+    <var name="bedTopography"/>
+    <var name="lowerSurface"/>
+    <var name="upperSurface"/>
+    <var name="surfaceSpeed"/>
+    <var name="floatingBasalMassBal"/>
+    <var name="sfcMassBal"/>
+    <var name="daysSinceStart"/>
+    <var name="deltat"/>
+    <var name="allowableDtACFL"/>
+    <var name="allowableDtDCFL"/>
+    <var name="cellMask"/>
+    <var name="edgeMask"/>
+    <var name="dHdt"/>
+    <var name="dynamicThickening"/>
+
+</stream>
+
+</streams>
+
+
