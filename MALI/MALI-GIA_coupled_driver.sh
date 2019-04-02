@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-#SBATCH --time=01:00:00   # walltime
+#SBATCH --time=16:00:00   # walltime
 #SBATCH --nodes=1   # number of nodes
 ##SBATCH --account=w19_icesheetfreshwater   # account name
-##SBATCH --qos=standard
-#SBATCH --qos=interactive
+#SBATCH --qos=standard
 #SBATCH --job-name=MALI-GIA   # job name
 
 # Script to alternately run MALI and GIA in a data-coupled fashion.
@@ -31,24 +30,26 @@ GIAPATH=~/giabisicles/MALI
 MALI=./landice_model
 
 MALI_INPUT=thwaites.4km.cleaned.nc
-MALI_OUTPUT=output.nc
+MALI_OUTPUT=output-cpl.nc
 MALI_NL=namelist.landice
-end_yr=300
+END_ITER=300
+CPL_DT=2.0
 
-RESTART_RUN=0 # should be 0 or 1
+RESTART_SCRIPT=0 # should be 0 or 1
 # ==================
 
 # Other things you could change
 GIAGRID=gia_grid.nc
-MALILOAD=mali_load
-GIAOUTPUT=uplift_out
+MALILOAD=mali_load.nc
+GIAOUTPUT=uplift_GIA.nc
 
 
 source /users/mhoffman/setup_badger_mods.20181206.sh
 meshvars="latCell,lonCell,xCell,yCell,zCell,indexToCellID,latEdge,lonEdge,xEdge,yEdge,zEdge,indexToEdgeID,latVertex,lonVertex,xVertex,yVertex,zVertex,indexToVertexID,cellsOnEdge,nEdgesOnCell,nEdgesOnEdge,edgesOnCell,edgesOnEdge,weightsOnEdge,dvEdge,dcEdge,angleEdge,areaCell,areaTriangle,cellsOnCell,verticesOnCell,verticesOnEdge,edgesOnVertex,cellsOnVertex,kiteAreasOnVertex"
 
 
-if [ $RESTART_RUN -eq 1 ]; then
+if [ $RESTART_SCRIPT -eq 1 ]; then
+  # REDO THE FINAL ITERATION
   RSTTIME=`head -c 20 restart_timestamp | tail -c 19`
   RSTYR=`echo $RSTTIME|head -c 4`
   echo RSTYR=$RSTYR
@@ -59,37 +60,40 @@ else
   startyear=0
 fi
 
+mkdir iteration_archive
 
-for i in $(seq $startyear $end_yr); do
+for i in $(seq $startyear $END_ITER); do
 
    echo ""; echo ""
    echo "=================================================="
    echo "Starting iteration $i"; echo ""; echo ""
 
    # Check if initial run or restart
-   if [ $i -eq 1 ] && [ $RESTART_RUN -eq 0 ]; then
+   if [ $i -eq 0 ] && [ $RESTART_SCRIPT -eq 0 ]; then
       echo "This is the first iteration of a new simulation: Preparing new run."
 
       # Set up GIA mesh
       $GIAPATH/create_GIA_domain.py -m $MALI_INPUT -g $GIAGRID
+      rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
 
       # Set restart flag to false, to be safe
       sed -i.SEDBACKUP "s/config_do_restart.*/config_do_restart = .false./" $MALI_NL
       sed -i.SEDBACKUP "s/config_start_time.*/config_start_time = '0000-01-01_00:00:00'/" $MALI_NL
 
       # Set GIA model args for a cold run
-      GIAARGS=""
+      GIAARGS="-t $CPL_DT"
    else # this is a restart
-      echo "This iteration is a restart.  Preparing restart run."
+      echo "This iteration is a restart for MALI.  Preparing MALI restart run."
       # Set restart flag to restart (will be done every time, but that's ok)
       sed -i.SEDBACKUP "s/config_do_restart.*/config_do_restart = .true./" $MALI_NL
       sed -i.SEDBACKUP "s/config_start_time.*/config_start_time = 'file'/" $MALI_NL
 
       # Set GIA model args for a restart
-      GIAARGS="-r"
+      GIAARGS="-r -t $CPL_DT"
    fi
 
-
+   mkdir iteration_archive/iter_$i
+   
    # First run MALI
    echo "Starting MALI at time:"
    date
@@ -97,22 +101,30 @@ for i in $(seq $startyear $end_yr); do
    echo "Finished MALI at time:"
    date
 
+   mv log.landice* iteration_archive/iter_${i}
+   mv log.albany* iteration_archive/iter_${i}
+
    # interpolate ice load to GIA grid
    # copy second to last time of the needed fields.  This represents the prior year.
-   ncks -A -d Time,-2 -v thickness,bedTopography,$meshvars $MALI_OUTPUT $MALILOAD.nc
-   cp $MALILOAD.nc ${MALILOAD}.iter${i}.nc
-   $GIAPATH/interp_MALI-GIA.py -d g -m $MALILOAD.nc -g $GIAGRID
-   cp iceload.nc iceload.iter${i}.nc
+   ncks -A -d Time,-2 -v thickness,bedTopography,$meshvars $MALI_OUTPUT $MALILOAD
+   rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
+   cp $MALILOAD iteration_archive/iter_${i}
+
+   $GIAPATH/interp_MALI-GIA.py -d g -m $MALILOAD -g $GIAGRID
+   rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
+   cp iceload.nc iteration_archive/iter_${i}
 
    # Run GIA model
    echo "Starting GIA model"
    $GIAPATH/mali-gia-driver.py $GIAARGS
-   cp $GIAOUTPUT.nc ${GIAOUTPUT}.iter${i}.nc
+   rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
+   cp $GIAOUTPUT iteration_archive/iter_${i}
    echo "Finished GIA model"
 
    # interpolate bed topo to MALI grid
-   $GIAPATH/interp_MALI-GIA.py -d m -m $MALI_INPUT -g $GIAOUTPUT.nc
-   cp bedtopo_update_mpas.nc bedtopo_update_mpas.iter${i}.nc
+   $GIAPATH/interp_MALI-GIA.py -d m -m $MALI_INPUT -g $GIAOUTPUT
+   rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
+   cp bedtopo_update_mpas.nc iteration_archive/iter_${i}
 
    # Stick new bed topo into restart file
    # (could also input it as a forcing file... not sure which is better)
@@ -121,14 +133,16 @@ for i in $(seq $startyear $end_yr); do
    echo restart time=$RSTTIME
    echo restart filename=$RSTFILE
 
-   if [ $RESTART_RUN -eq 1 ]; then
-     let jj=${i}+1
-     cp $RSTFILE $RSTFILE.iter${jj}.bak  # back up first (maybe remove later)
+   if [ $RESTART_SCRIPT -eq 1 ]; then
+#     let jj=${i}+1
+#     cp $RSTFILE $RSTFILE.iter${jj}.bak  # back up first (maybe remove later)
+     cp $RSTFILE iteration_archive/iter_${i}
    else
-     cp $RSTFILE $RSTFILE.iter${i}.bak  # back up first (maybe remove later)
+     cp $RSTFILE iteration_archive/iter_${i}
    fi
 
    ncks -A -v bedTopography bedtopo_update_mpas.nc $RSTFILE
+   rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
 
    echo "Finished iteration $i"
 

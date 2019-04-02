@@ -16,12 +16,13 @@ parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.description = __doc__
 parser.add_argument("-r", dest="restart", action='store_true', help="Indicates the GIA model is to be restarted from a previous run.")
 parser.add_argument("-i", "--input", dest="inputFile", help="name of ice load time-series input file", default="iceload.nc", metavar="FILENAME")
+parser.add_argument("-t", "--timestep", dest="timeStep", help="timestep to be used by GIA model in years", default="1.0", type=float, metavar="DT")
 options = parser.parse_args()
 
 maliRestart=options.restart
 
 if maliRestart:
-    # this is a restart from a previous GIA run, so load needed restart info
+    print "this is a restart from a previous GIA run, so loading needed restart info."
     fr = netCDF4.Dataset('gia_restart_data.nc','r')
     # TODO: check size matches size used below
     Uhatn_restart = fr.variables['Uhatn'][:]
@@ -32,16 +33,17 @@ else:
     taf0hat_restart = None
 
 # Open iceload file interpolated from MALI to GIA grid and get some grid info
-f = netCDF4.Dataset('iceload.nc','r')
+f = netCDF4.Dataset(options.inputFile,'r')
 x_data = f.variables['x'][:]
 y_data = f.variables['y'][:]
 Nx = len(x_data)
 Ny = len(y_data)
 xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
 nt = len(f.dimensions['Time'])
-# note: Eventually may want to make the timekeeping more robust.  Right now assuming spacing is always 1 year!
-dt = 1.0
+# note: Eventually may want to make the timekeeping more robust.
 f.close()
+dt = options.timeStep
+print "Using dt={} years".format(dt)
 
 ekwargs = {'u2'  :  4.e18,
            'u1'  :  2.e19,
