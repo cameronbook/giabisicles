@@ -1,0 +1,92 @@
+&velocity_solver
+    config_velocity_solver = 'FO'
+    config_sia_tangent_slope_calculation = 'from_vertex_barycentric'
+    !config_flowParamA_calculation = 'constant'
+    !config_do_velocity_reconstruction_for_external_dycore = .true.
+    !config_simple_velocity_type = 'uniform'
+ config_use_glp = .true.
+/
+
+&advection
+    config_thickness_advection = 'fo'
+    config_tracer_advection = 'none'
+/
+
+&thermal_solver
+    config_thermal_solver = 'none'
+    config_temperature_init = 'file'
+    config_thermal_thickness = 1.0
+    config_surface_air_temperature_source = 'file'
+    config_surface_air_temperature_value = 273.15
+    config_basal_heat_flux_source = 'file'
+    config_basal_heat_flux_value = 0.0
+!    config_basal_mass_bal_float = 'file'
+config_basal_mass_bal_float = 'seroussi'
+/
+
+&calving
+        config_calving = 'none'
+        !config_calving = 'thickness_threshold'
+        config_restore_calving_front = .false.
+        config_calving_topography = -2050.0
+        config_calving_thickness = 300.0
+        config_calving_timescale = 0.0
+/
+
+&physical_parameters
+    config_ice_density = 910.0
+    config_dynamic_thickness = 10.0
+/
+
+&time_integration
+    config_dt = '0000-00-30_00:00:00'
+    config_time_integration = 'forward_euler'
+    config_adaptive_timestep = .true.
+    !config_adaptive_timestep = .false.
+    config_min_adaptive_timestep = 60.0
+    config_max_adaptive_timestep = 1.575e10
+    config_adaptive_timestep_CFL_fraction = 0.8
+    config_adaptive_timestep_include_DCFL = .false.
+    config_adaptive_timestep_force_interval = '0001-00-00_00:00:00'
+/
+
+&time_management
+    config_do_restart = .false.
+    config_restart_timestamp_name = 'restart_timestamp'
+    config_start_time = '0000-01-01_00:00:00'
+!    config_start_time = 'file'
+    config_stop_time = '0010-01-01_00:00:00'
+    config_calendar_type = 'gregorian_noleap'
+/
+
+&io
+    config_write_output_on_startup = .true.
+    config_pio_num_iotasks = 0
+    config_pio_stride = 1
+    config_year_digits = 4
+    config_output_external_velocity_solver_data = .false.
+/
+
+&decomposition
+    config_num_halos = 2
+    config_block_decomp_file_prefix = 'graph.info.part.'
+    config_number_of_blocks = 0
+    config_explicit_proc_decomp = .false.
+    config_proc_decomp_file_prefix = 'graph.info.part.'
+/
+
+&debug
+    config_print_thickness_advection_info = .true.
+    config_print_calving_info = .false.
+    config_print_thermal_info = .false.
+    config_always_compute_fem_grid = .false.
+    config_print_velocity_cleanup_details = .false.
+/
+
+&AM_globalStats
+    config_AM_globalStats_enable = .true.
+    config_AM_globalStats_compute_interval = '0000-00-00_01:00:00'
+    config_AM_globalStats_compute_on_startup = .true.
+    config_AM_globalStats_write_on_startup = .true.
+/
+
