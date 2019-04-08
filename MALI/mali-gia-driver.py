@@ -49,7 +49,7 @@ ekwargs = {'u2'  :  4.e18,
            'u1'  :  2.e19,
            'h'   :  200000.,
            'D'   :  13e23}
-buelerflux = giascript.BuelerTopgFlux(x_data, y_data, './', options.inputFile, 'blah', nt, dt, ekwargs, fac=2, read='netcdf_read', U0=Uhatn_restart)
+buelerflux = giascript.BuelerTopgFlux(x_data, y_data, './', options.inputFile, 'blah', nt, dt, ekwargs, fac=2, read='netcdf_read', U0=Uhatn_restart, taf0=taf0hat_restart)
 
 # create a new GIA output file
 fout = netCDF4.Dataset("uplift_GIA.nc", "w")
