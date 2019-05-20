@@ -9,7 +9,7 @@ Classes
 -------
 TopgFluxBase: An abstract class for BISICLES interface and common tasks
 BuelerTopgFlux: The Bueler 2007 method, in velocity form, with elasticity
-CathlesTopgFlux: 
+CathlesTopgFlux:
 
 Methods
 -------
@@ -45,15 +45,15 @@ class TopgFluxBase(object):
     implementing the GIA, which need to be provided via, at least, initialize
     (for method-specific initialization) and _update_Udot, which performs the
     GIA.
-    
+
     Parameters
     ----------
     xg, yg  :   1D ndarrays representing x- and y-coordinates (in m) of domain.
     drctry  :   The directory of the BISICLES run plot files
-    pbasename:  
+    pbasename:
     tmax    :   The maximum time of simulation (used to load plot files)
     dt      :   The time step of the coupling.
-    ekwargs :   a dict of earth rheology parameters. 
+    ekwargs :   a dict of earth rheology parameters.
         Accepted keys:  u (viscosity, single vinscoust halfspace)
                         u1, u2, h (h thick layer with u2, over u1 halfspace)
                         g (gravity, defualt 9.8)
@@ -81,7 +81,7 @@ class TopgFluxBase(object):
                     include_elastic=False):
         # Grid and FFT properties
         self.xg = xg
-        self.yg = yg 
+        self.yg = yg
         self.nx, self.ny = len(xg), len(yg)
         nx, ny = self.nx, self.ny
         self.dx = xg[1]-xg[0]                           # m
@@ -103,7 +103,7 @@ class TopgFluxBase(object):
         self.mu =    ekwargs.get('mu', 26.6)*1e9        # Pa
         self.lam =   ekwargs.get('lam', 34.2666)*1e9    # Pa
         self.D =     ekwargs.get('D', 1e23)             # N m
-        
+
         warn = 'Two layer model must have u1 and u2 set.'
         assert (self.u1 is not None) == (self.u2 is not None) == (self.h is not None), warn
         if self.u1 is not None:
@@ -165,7 +165,7 @@ class TopgFluxBase(object):
 
     def needToUpdate(self, t):
         """Check if updated velocities needed.
-        
+
         Will return true if stored time is different from current time and
         appropriate number of steps skipped (self.skip, for fixeddt) or the
         coupling timestep has passed (self.dt, for not fixeddt)."""
@@ -181,7 +181,7 @@ class TopgFluxBase(object):
 
         if self.needToUpdate(t):
             self._update_Udot(t)
-    
+
         xind = int((x - self.xg[0])/self.dx)
         yind = int((y - self.yg[0])/self.dy)
 
@@ -207,8 +207,9 @@ class TopgFluxBase(object):
         """Reads a netCDF4 file of Thwaites Glacier input after being interpolated to the square GIA grid
         """
         fin = netCDF4.Dataset(fname,'r') # input file needs to be changed
-        #print self.t
+        print "reading time ", self.t
         thk = fin.variables['thk'][self.t,:,:] # how to load at the correct time?
+        print thk.mean()
         bas = fin.variables['bas'][self.t,:,:]
         fin.close() # TODO: open once instead of every timestep
 
@@ -229,7 +230,7 @@ class TopgFluxBase(object):
         f = h5py.File(oname, 'r')
         foo = f['level_0/data:datatype=0'].value.reshape((-1,self.ny+2,self.nx+2))[:,1:-1,1:-1]
         f.close()
-        
+
         # Extract the arrays and delete the temporary file.
         thk, bas = foo[0], foo[6]
         subprocess.call('rm '+oname, shell=True)
@@ -237,7 +238,7 @@ class TopgFluxBase(object):
         return thk, bas
 
     def amrread(self, fname):
-        """Reads the lowest 
+        """Reads the lowest
 
         Note: Requries the amrfile python module and the libamrfile.so library
         to be compiled.
@@ -256,14 +257,14 @@ class BuelerTopgFlux(TopgFluxBase):
     unchanged, so we can assume that we compute the loads at each half-timestep
     and use a finite difference approximation of the uplift at integer time-steps
     to compute the displacement velocity.
-    
+
     To compute the load at each half-timestep requires keeping in memory the load
     above flotation at the start of the simulation to get the load (relative to
     the start).
     """
     def initialize(self):
-        self.beta = self.rho_r*self.g+self.D*self.k**4    # Pa / m 
-        self.gamma = (self.beta*(self.taus + 0.5*self.dt*_SECSPERYEAR))**(-1) # m/yr/Pa 
+        self.beta = self.rho_r*self.g+self.D*self.k**4    # Pa / m
+        self.gamma = (self.beta*(self.taus + 0.5*self.dt*_SECSPERYEAR))**(-1) # m/yr/Pa
         self.gamma[0,0] = 0.
 
         nx, ny = self.nx, self.ny
@@ -273,13 +274,13 @@ class BuelerTopgFlux(TopgFluxBase):
         if self.U0 is not None:      # Set disequilibrium uplift at t=0
             self.Uhatn = self.fft2andpad(self.U0)
         else:
-            self.Uhatn = np.zeros((ny*self.fac,nx*self.fac), dtype=np.complex128)    
+            self.Uhatn = np.zeros((ny*self.fac,nx*self.fac), dtype=np.complex128)
         if self.taf0 is not None:    # Set initial (compensated) load at t=0
             self.taf0hat = self.fft2andpad(self.taf0)
         else:
             self.taf0hat = np.zeros((ny*self.fac,nx*self.fac), dtype=np.complex128)
 
-        self.dLhat = np.zeros((ny*self.fac,nx*self.fac), dtype=np.complex128)    
+        self.dLhat = np.zeros((ny*self.fac,nx*self.fac), dtype=np.complex128)
         self.Udot = np.zeros((ny,nx))
         self.interper = RectBivariateSpline(self.xg, self.yg, self.Udot.T)
 
@@ -288,17 +289,18 @@ class BuelerTopgFlux(TopgFluxBase):
 
 
     def _update_Udot(self,t):
+        self.t = t
         if not np.any(self.taf0hat) and self.U0 is None:
             thk0, bas0 = self.read(self.pfname.format(0))
             self.taf0hat = self.fft2andpad(thickness_above_floating(thk0,bas0,
                                                         self.rho_i/self.rho_w))
             self.bas0hat = self.fft2andpad(bas0)
- 
+
         if self.fixeddt:
             n = int(t/self.dt)
         else:
             n = get_latest_plot_file(self.drctry, 'plot')
- 
+
         print(self.fixeddt, n)
 
         thkn, basn = self.read(self.pfname.format(n))
@@ -310,12 +312,11 @@ class BuelerTopgFlux(TopgFluxBase):
         self.dLhatold = dLhat
 
         self.interper = RectBivariateSpline(self.xg, self.yg, self.Udot.T)
-        self.t = t
 
         if n % self.nwrite == 0:
             pickle.dump(self.Uhatn, open(self.gfname.format(n), 'w'))
 
-    
+
     def _Udot_from_dLhat(self, dLhat):
         """Update the velocity field from the stress field dLhat (Pa).
 
@@ -329,11 +330,11 @@ class BuelerTopgFlux(TopgFluxBase):
         self.Uhatn += Uhatdot*self.dt
         # Now include the elastic effect if requested.
         if self.include_elastic:
-            uedot = self.ue*(dLhat - self.dLhatold)/self.dt 
+            uedot = self.ue*(dLhat - self.dLhatold)/self.dt
             Uhatdot += uedot
             self.uedotold = uedot
         self.Udot = self.ifft2andcrop(Uhatdot)
-        
+
 class CathlesTopgFlux(TopgFluxBase):
     def initialize(self):
         nsteps = int(tmax/dt/self.skip)
@@ -344,8 +345,8 @@ class CathlesTopgFlux(TopgFluxBase):
         self._update_Udot(0)
         self.Udot = np.zeros((ny,nx))
 
-    def _update_Udot(self,t): 
-        if t == 0: 
+    def _update_Udot(self,t):
+        if t == 0:
             self.uplinterp = self.uplift[0]
             return
 
@@ -359,7 +360,7 @@ class CathlesTopgFlux(TopgFluxBase):
             thk1, bas1 = self.read(self.pfname.format(tstep))
             thk0, bas0 = self.read(self.pfname.format(tstep-self.skip))
 
-            dLoad = (thickness_above_floating(thk1, bas1) - 
+            dLoad = (thickness_above_floating(thk1, bas1) -
                         thickness_above_floating(thk0, bas0))
 
             self.propagate_2d_adjustment(t, dLoad, tstep)
@@ -378,17 +379,17 @@ class CathlesTopgFlux(TopgFluxBase):
         """
         Propagate the effect of dLoad at t to future times in self.times.
         """
-        
+
         # Fourier transform the laod.
         dload_f = self.fft2andpad(dLoad)
         # Compute the duration of dLoad from t to future times, with some
         # hackery for array slicing.
-        durs = (self.ts[1:,None,None] if tstep == 0 
+        durs = (self.ts[1:,None,None] if tstep == 0
                 else self.ts[1:-tstep/self.skip,None,None])
         # Construct the array of unit responses.
         if not self.rate:
             unit_resp = -(1 - np.exp(-durs/self.taus))
-        else: 
+        else:
             unit_resp = -1./self.taus*np.exp(-durs/self.taus)
             unit_resp[:,0,0] = 0.
         # Propagate response to current and future times and transform back.
@@ -402,7 +403,7 @@ def thickness_above_floating(thk, bas, beta=0.9):
     beta - ratio of ice density to water density (defauly=0.9)
     """
     #   Segment over ocean, checks for flotation    Over land
-    taf = (beta*thk+bas)*(beta*thk>-bas)*(bas<0) + beta*thk*(bas>0)
+    taf = (beta*thk+bas)*(beta*thk>-bas)*(bas<0) + beta*thk*(bas>=0)
     return taf
 
 # TO BE IMPLEMENTED
@@ -437,7 +438,7 @@ if __name__ == '__main__':
         test = sys.argv[1]
         Nx, Ny = int(sys.argv[2]), int(sys.argv[3])
         xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
-        
+
         # Generate the heaviside load (applied at t=0)
         load = np.zeros((Ny, Nx))
         if test == 'periodic':
@@ -448,7 +449,7 @@ if __name__ == '__main__':
         else:
             raise ValueError('test style not understood')
         # Make the flux object
-        buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), './', 'blah', 'blah', TMAX, 1., {},fac=1)       
+        buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), './', 'blah', 'blah', TMAX, 1., {},fac=1)
         if test in ['periodic', 'square']:
             for i in range(TMAX):
                 # The load is heaviside, so it doesn't change step to step, but the uplift field keeps updating.
@@ -456,7 +457,7 @@ if __name__ == '__main__':
                 np.savetxt("{0}test_t{1:d}.txt".format(test,i), buelerflux.ifft2andcrop(buelerflux.Uhatn))
         elif test in ['restart']:
             buelerflux._Udot_from_dLhat(buelerflux.fft2andpad(load))
-            buelerrestart = buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny), 
+            buelerrestart = buelerflux = BuelerTopgFlux(np.linspace(0,128000,Nx), np.linspace(0,128000,Ny),
                                                                 './', 'blah',
                                                                 'blah', TMAX,
                                                                 1., {},fac=1,
@@ -468,4 +469,3 @@ if __name__ == '__main__':
                 print('Restart test success')
             else:
                 print('Restart test fail')
-
