@@ -78,7 +78,8 @@ class TopgFluxBase(object):
     def __init__(self, xg, yg, drctry, pbasename, gbasename, tmax, dt, ekwargs,
                     U0=None, taf0=None, driver=None, rate=False, fixeddt=True,
                     read='amrread', skip=1, fac=2, nwrite=10,
-                    include_elastic=False):
+                    include_elastic=False, maliForcing=None):
+
         # Grid and FFT properties
         self.xg = xg
         self.yg = yg
@@ -125,7 +126,7 @@ class TopgFluxBase(object):
         else:
             r = 1
         self.r = r
-        # Lithospher filter
+        # Lithosphere filter
         self.alpha_l = 1 + self.k**4*self.D/self.g/self.rho_r
         # Relaxation time
         self.taus = 2*self.u*self.k/self.g/self.rho_r/self.alpha_l*self.r  # s
@@ -160,6 +161,9 @@ class TopgFluxBase(object):
             self.read = self.netCDF4_read
         else:
             raise(ValueError, 'read type not understood')
+
+        if maliForcing:
+            self.maliForcing=maliForcing
 
         self.initialize()
 
@@ -204,13 +208,14 @@ class TopgFluxBase(object):
         return np.real(np.fft.ifft2(arr))[..., :self.ny, :self.nx]
 
     def netCDF4_read(self, fname):
-        """Reads a netCDF4 file of Thwaites Glacier input after being interpolated to the square GIA grid
+        """Reads a netCDF4 file of MALI input after being interpolated to the square GIA grid
         """
-        fin = netCDF4.Dataset(fname,'r') # input file needs to be changed
+        fin = netCDF4.Dataset(fname,'r')
         print "reading time ", self.t
-        thk = fin.variables['thk'][self.t,:,:] # how to load at the correct time?
-        print thk.mean()
-        bas = fin.variables['bas'][self.t,:,:]
+
+        # for i in range(5):
+        #     thk[i,:,:] = thk[self.t,:,:] - ( thk[self.t,:,:] / nt ) * i
+
         fin.close() # TODO: open once instead of every timestep
 
         return thk, bas
@@ -248,6 +253,20 @@ class TopgFluxBase(object):
         bas = extract_field(amrID, 'Z_base')
         amrio.free(amrID)
         return thk, bas
+
+class maliForcing(object):
+    """
+    Stuff used for MALI coupling
+    """
+    def __init__(self, thk_Start, bas_Start, thk_End, bas_End, nt):
+
+        self.thk_Start = thk_Start
+        self.bas_Start = bas_Start
+        self.thk_End = thk_End
+        self.bas_End = bas_End
+        self.nt = nt
+
+
 
 class BuelerTopgFlux(TopgFluxBase):
     """
@@ -290,8 +309,20 @@ class BuelerTopgFlux(TopgFluxBase):
 
     def _update_Udot(self,t):
         self.t = t
+        print t
+        # print "self.dt=", self.dt
+
         if not np.any(self.taf0hat) and self.U0 is None:
-            thk0, bas0 = self.read(self.pfname.format(0))
+
+            if self.maliForcing:
+
+               thk0 = self.maliForcing.thk_Start
+               bas0 = self.maliForcing.bas_Start
+
+            else:
+               thk0, bas0 = self.read(self.pfname.format(0))
+            print 'thk0',thk0
+
             self.taf0hat = self.fft2andpad(thickness_above_floating(thk0,bas0,
                                                         self.rho_i/self.rho_w))
             self.bas0hat = self.fft2andpad(bas0)
@@ -301,9 +332,20 @@ class BuelerTopgFlux(TopgFluxBase):
         else:
             n = get_latest_plot_file(self.drctry, 'plot')
 
-        print(self.fixeddt, n)
+        # print(self.fixeddt, n)
 
-        thkn, basn = self.read(self.pfname.format(n))
+        thk_Start = self.maliForcing.thk_Start
+        bas_Start = self.maliForcing.bas_Start
+        thk_End = self.maliForcing.thk_End
+        bas_End = self.maliForcing.bas_End
+        nt = self.maliForcing.nt
+
+        # the following three lines to be used when coupling to MALI
+
+        thkn = thk_Start + (((thk_End - thk_Start) / nt) * (t+1))
+        basn = bas_Start + (((bas_End - bas_Start) / nt) * (t+1))
+
+
         dLhat = (self.fft2andpad(thickness_above_floating(thkn,basn,self.rho_i/self.rho_w)) -
                                                     self.taf0hat)*self.rho_i*self.g
 
@@ -327,7 +369,9 @@ class BuelerTopgFlux(TopgFluxBase):
         Uhatdot = -self.gamma*(dLhat + self.beta*self.Uhatn)*_SECSPERYEAR    # m / yr
         # Update uplift field prior to including elastic effect, so that fluid
         # equilibrium is corrct.
-        self.Uhatn += Uhatdot*self.dt
+
+        self.Uhatn = self.Uhatn + Uhatdot*self.dt
+        # self.Uhatn += Uhatdot*self.dt
         # Now include the elastic effect if requested.
         if self.include_elastic:
             uedot = self.ue*(dLhat - self.dLhatold)/self.dt

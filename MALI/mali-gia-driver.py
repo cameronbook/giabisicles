@@ -16,7 +16,10 @@ parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.description = __doc__
 parser.add_argument("-r", dest="restart", action='store_true', help="Indicates the GIA model is to be restarted from a previous run.")
 parser.add_argument("-i", "--input", dest="inputFile", help="name of ice load time-series input file", default="iceload.nc", metavar="FILENAME")
-parser.add_argument("-t", "--timestep", dest="timeStep", help="timestep to be used by GIA model in years", default="1.0", type=float, metavar="DT")
+parser.add_argument("-t", "--timestep", dest="timeStep", help="timestep to be used by GIA model in years", default="0.01", type=float, metavar="DT")
+parser.add_argument("-d", "--Duration", dest="Duration", help="run duration to be used by GIA model in years", default="1.0", type=float, metavar="T")
+parser.add_argument("-ic", "--initialCondition", dest="initialConditionFile", help="name of thk, bas initial condition file", default="initial_condition.nc", metavar="FILENAME")
+
 options = parser.parse_args()
 
 maliRestart=options.restart
@@ -27,10 +30,17 @@ if maliRestart:
     # TODO: check size matches size used below
     Uhatn_restart = fr.variables['Uhatn'][:]
     taf0hat_restart = fr.variables['taf0hat'][:]
+    thk_Start = fr.variables['thk_Start'][:]
+    bas_Start = fr.variables['bas_Start'][:]
     fr.close()
 else:
     Uhatn_restart = None
     taf0hat_restart = None
+    ic = netCDF4.Dataset(options.initialConditionFile, 'r')
+    thk_Start = ic.variables['thk'][:]
+    print "thk_Start =", thk_Start
+    bas_Start = ic.variables['bas'][:]  # open special init cond file for original thk_start and bas_start
+    ic.close()
 
 # Open iceload file interpolated from MALI to GIA grid and get some grid info
 f = netCDF4.Dataset(options.inputFile,'r')
@@ -39,17 +49,26 @@ y_data = f.variables['y'][:]
 Nx = len(x_data)
 Ny = len(y_data)
 xi, yj = np.meshgrid(np.arange(Nx), np.arange(Ny))
-nt = len(f.dimensions['Time'])
+thk_End = f.variables['thk'][0,:,:]
+bas_End = f.variables['bas'][0,:,:]
+# nt = len(f.dimensions['Time'])
 # note: Eventually may want to make the timekeeping more robust.
 f.close()
+T = options.Duration
 dt = options.timeStep
-print "Using dt={} years".format(dt)
+nt = int(T / dt)
+print "Using nt = {}".format(nt)
+assert nt*dt==T, "dt does not divide evenly into duration."
 
-ekwargs = {'u2'  :  4.e18,
+print "Using dt = {} years".format(dt)
+
+ekwargs = {'u2'  :  3.e18,
            'u1'  :  2.e19,
            'h'   :  200000.,
            'D'   :  13e23}
-buelerflux = giascript.BuelerTopgFlux(x_data, y_data, './', options.inputFile, 'blah', nt, dt, ekwargs, fac=2, read='netcdf_read', U0=Uhatn_restart, taf0=taf0hat_restart)
+
+maliForcing = giascript.maliForcing(thk_Start, bas_Start, thk_End, bas_End, nt)
+buelerflux = giascript.BuelerTopgFlux(x_data, y_data, './', options.inputFile, 'blah', nt, dt, ekwargs, fac=2, read='netcdf_read', U0=Uhatn_restart, taf0=taf0hat_restart, maliForcing=maliForcing)
 
 # create a new GIA output file
 fout = netCDF4.Dataset("uplift_GIA.nc", "w")
@@ -63,6 +82,7 @@ yout[:] = y_data
 tout = fout.createVariable('Time', 'f', ('Time',))
 tout.units='year'
 up_out = fout.createVariable('uplift', 'f', ('Time', 'y','x'))
+
 
 for i in range(nt):
     print "Starting time step {}".format(i)
@@ -84,4 +104,10 @@ Uhatn_restartVar = fout.createVariable('Uhatn', 'f', ('y','x'))
 Uhatn_restartVar[:] = buelerflux.ifft2andcrop(buelerflux.Uhatn)
 taf0hat_restartVar = fout.createVariable('taf0hat', 'f', ('y','x'))
 taf0hat_restartVar[:] = buelerflux.ifft2andcrop(buelerflux.taf0hat)
+thk_Start = fout.createVariable('thk_Start', 'f', ('y','x'))
+thk_Start[:] = thk_End
+bas_Start = fout.createVariable('bas_Start', 'f', ('y','x'))
+bas_Start[:] = bas_End
+
+
 fr.close()

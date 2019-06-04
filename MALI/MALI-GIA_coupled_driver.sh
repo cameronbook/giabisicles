@@ -33,7 +33,7 @@ MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output-cpl.nc
 MALI_NL=namelist.landice
 END_ITER=300
-CPL_DT=2.0
+CPL_DT=1.0
 
 RESTART_SCRIPT=0 # should be 0 or 1
 # ==================
@@ -81,7 +81,7 @@ for i in $(seq $startyear $END_ITER); do
       sed -i.SEDBACKUP "s/config_start_time.*/config_start_time = '0000-01-01_00:00:00'/" $MALI_NL
 
       # Set GIA model args for a cold run
-      GIAARGS="-t $CPL_DT"
+      GIAARGS="-d $CPL_DT"
    else # this is a restart
       echo "This iteration is a restart for MALI.  Preparing MALI restart run."
       # Set restart flag to restart (will be done every time, but that's ok)
@@ -89,11 +89,11 @@ for i in $(seq $startyear $END_ITER); do
       sed -i.SEDBACKUP "s/config_start_time.*/config_start_time = 'file'/" $MALI_NL
 
       # Set GIA model args for a restart
-      GIAARGS="-r -t $CPL_DT"
+      GIAARGS="-r -d $CPL_DT"
    fi
 
    mkdir iteration_archive/iter_$i
-   
+
    # First run MALI
    echo "Starting MALI at time:"
    date
