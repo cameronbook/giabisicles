@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --time=16:00:00   # walltime
+#SBATCH --time=00:10:00   # walltime
 #SBATCH --nodes=1   # number of nodes
 ##SBATCH --account=w19_icesheetfreshwater   # account name
 #SBATCH --qos=standard
@@ -26,12 +26,13 @@
 
 # ===================
 # Set these locations and vars
-GIAPATH=~/giabisicles/MALI
+GIAPATH=.
 MALI=./landice_model
 
 MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output-cpl.nc
 MALI_NL=namelist.landice
+MALI_STREAMS=streams.landice
 END_ITER=300
 CPL_DT=1.0
 
@@ -48,21 +49,42 @@ source /users/mhoffman/setup_badger_mods.20181206.sh
 meshvars="latCell,lonCell,xCell,yCell,zCell,indexToCellID,latEdge,lonEdge,xEdge,yEdge,zEdge,indexToEdgeID,latVertex,lonVertex,xVertex,yVertex,zVertex,indexToVertexID,cellsOnEdge,nEdgesOnCell,nEdgesOnEdge,edgesOnCell,edgesOnEdge,weightsOnEdge,dvEdge,dcEdge,angleEdge,areaCell,areaTriangle,cellsOnCell,verticesOnCell,verticesOnEdge,edgesOnVertex,cellsOnVertex,kiteAreasOnVertex"
 
 
+# Match output interval in MALI namelist to END_ITER & ensure format matches that needed by MALI
+output_int=`python -c "output_int=int($CPL_DT); print '{0:04d}'.format(output_int)"`
+sed -i.SEDBACKUP -e "/output-cpl.nc/,/<\/streams>/ s/output_interval.*/output_interval=\"$output_int-00-00_00:00:00\">/" $MALI_STREAMS
+echo output_int=$output_int
+
+# Match run duration in MALI namelist to coupling interval & ensure format matches that needed by MALI
+cpl_dt_formatted=`python -c "cpl_dt_int=int($CPL_DT); print '{0:04d}'.format(cpl_dt_int)"`
+sed -i.SEDBACKUP "s/config_run_duration.*/config_run_duration = '$cpl_dt_formatted-00-00_00:00:00'/" $MALI_NL
+echo cpl_dt=$cpl_dt_formatted
+
+
 if [ $RESTART_SCRIPT -eq 1 ]; then
-  # REDO THE FINAL ITERATION
-  RSTTIME=`head -c 20 restart_timestamp | tail -c 19`
-  RSTYR=`echo $RSTTIME|head -c 4`
-  echo RSTYR=$RSTYR
-  startyear=`python -c "newyr=int('$RSTYR'); print '{0:04d}'.format(newyr-1)"`
-  echo startyear=$startyear
-  echo " $startyear-01-01_00:00:00" > restart_timestamp
+  start_ind=`cat coupler_restart.txt`
+  python -c "s=$CPL_DT*$start_ind; print '{0:04f}-01-01_00:00:00'.format(s)" > restart_timestamp
+  echo "new restart_timestamp value: " `cat restart_timestamp`
 else
-  startyear=0
+  start_ind=0
 fi
+echo start_ind=$start_ind
+
+# if [ $RESTART_SCRIPT -eq 1 ]; then
+#   # REDO THE FINAL ITERATION
+#   RSTTIME=`head -c 20 restart_timestamp | tail -c 19`
+#   RSTYR=`echo $RSTTIME|head -c 4`
+#   echo RSTYR=$RSTYR
+#   startyear=`python -c "newyr=int('$RSTYR'); print '{0:04d}'.format(newyr-$CPL_DT)"`
+#   echo startyear=$startyear
+#   echo " $startyear-01-01_00:00:00" > restart_timestamp
+# else
+#   startyear=0
+# fi
 
 mkdir iteration_archive
 
-for i in $(seq $startyear $END_ITER); do
+# for i in $(seq $startyear $END_ITER); do
+for i in $(seq $start_ind $END_ITER); do
 
    echo ""; echo ""
    echo "=================================================="
@@ -145,5 +167,8 @@ for i in $(seq $startyear $END_ITER); do
    rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
 
    echo "Finished iteration $i"
+
+   mid_iter=$i
+   echo $mid_iter>coupler_restart.txt
 
 done;
