@@ -62,7 +62,7 @@ echo cpl_dt=$cpl_dt_formatted
 
 if [ $RESTART_SCRIPT -eq 1 ]; then
   start_ind=`cat coupler_restart.txt`
-  python -c "s=$CPL_DT*$start_ind; print '{0:04f}-01-01_00:00:00'.format(s)" > restart_timestamp
+  python -c "s=int($CPL_DT*$start_ind); print '{0:04d}-01-01_00:00:00'.format(s)" > restart_timestamp
   echo "new restart_timestamp value: " `cat restart_timestamp`
 else
   start_ind=0
