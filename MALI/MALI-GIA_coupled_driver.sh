@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --time=00:10:00   # walltime
+#SBATCH --time=16:00:00   # walltime
 #SBATCH --nodes=1   # number of nodes
 ##SBATCH --account=w19_icesheetfreshwater   # account name
 #SBATCH --qos=standard
@@ -33,7 +33,7 @@ MALI_INPUT=thwaites.4km.cleaned.nc
 MALI_OUTPUT=output-cpl.nc
 MALI_NL=namelist.landice
 MALI_STREAMS=streams.landice
-END_ITER=300
+RUN_DURATION=300
 CPL_DT=1.0
 
 RESTART_SCRIPT=0 # should be 0 or 1
@@ -48,8 +48,10 @@ GIAOUTPUT=uplift_GIA.nc
 source /users/mhoffman/setup_badger_mods.20181206.sh
 meshvars="latCell,lonCell,xCell,yCell,zCell,indexToCellID,latEdge,lonEdge,xEdge,yEdge,zEdge,indexToEdgeID,latVertex,lonVertex,xVertex,yVertex,zVertex,indexToVertexID,cellsOnEdge,nEdgesOnCell,nEdgesOnEdge,edgesOnCell,edgesOnEdge,weightsOnEdge,dvEdge,dcEdge,angleEdge,areaCell,areaTriangle,cellsOnCell,verticesOnCell,verticesOnEdge,edgesOnVertex,cellsOnVertex,kiteAreasOnVertex"
 
+END_ITER=`python -c "import math; end_iter=int(math.ceil($RUN_DURATION / $CPL_DT)); print end_iter"`
+echo END_ITER=$END_ITER
 
-# Match output interval in MALI namelist to END_ITER & ensure format matches that needed by MALI
+# Match output interval in MALI streams to END_ITER & ensure format matches that needed by MALI
 output_int=`python -c "output_int=int($CPL_DT); print '{0:04d}'.format(output_int)"`
 sed -i.SEDBACKUP -e "/output-cpl.nc/,/<\/streams>/ s/output_interval.*/output_interval=\"$output_int-00-00_00:00:00\">/" $MALI_STREAMS
 echo output_int=$output_int
@@ -163,8 +165,13 @@ for i in $(seq $start_ind $END_ITER); do
      cp $RSTFILE iteration_archive/iter_${i}
    fi
 
-   ncks -A -v bedTopography bedtopo_update_mpas.nc $RSTFILE
+   # ncks -A -v bedTopography bedtopo_update_mpas.nc $RSTFILE
+   # rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
+
+   ncks -A -v upliftRate bedtopo_update_mpas.nc $RSTFILE
    rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
+
+
 
    echo "Finished iteration $i"
 
