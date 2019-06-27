@@ -35,6 +35,7 @@ import scipy.spatial
 import time
 from datetime import datetime
 
+np.set_printoptions(threshold=np.nan)
 
 print "== Gathering information.  (Invoke with --help for more details. All arguments are optional)\n"
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -191,7 +192,7 @@ y = giaFile.variables['y'][:]
 giaXY = np.zeros([Xi.shape[0]*Xi.shape[1],2])
 giaXY[:,0] = Yi.flatten()
 giaXY[:,1] = Xi.flatten()
-
+#print giaXY
 
 # ==========================
 if options.destination== 'g':
@@ -210,7 +211,7 @@ if options.destination== 'g':
     bas = fout.createVariable('bas', 'f', ('Time', 'y','x'))
 
     print "Creating interpolation object"
-    maxDist = MPASfile.variables['dcEdge'][:].max() / 2.0
+    maxDist = MPASfile.variables['dcEdge'][:].max() * 1.0
     vtx, wts, outsideIndx = delaunay_interp_weights(mpasXY, giaXY, maxDist)
 
     print "Begin interpolation"
@@ -244,6 +245,7 @@ if options.destination == 'm':
     tout.units='year'
     xtime = fout.createVariable('xtime', 'c', ('Time', 'StrLen'))
     bedTopo = fout.createVariable('bedTopography', 'd', ('Time', 'nCells'))
+    bedUplift = fout.createVariable('upliftRate', 'd', ('Time', 'nCells'))
 
     print "Creating interpolation object"
     vtx, wts, outsideIndx = delaunay_interp_weights(giaXY, mpasXY)
@@ -256,6 +258,8 @@ if options.destination == 'm':
     for t in range(nt):
         print "   Time {} = year {}".format(t, years[t])
         bedTopo[t,:] = delaunay_interpolate(giaFile.variables['uplift'][t,:]) + bedTopoBase
+        bedUplift[t,:] = delaunay_interpolate(giaFile.variables['uplift_rate'][t,:])
+        bedUplift[t,:] = bedUplift[t,:] / (365*24*3600) # convert m/yr to m/s
         tout[t] = t
         xtime[t,:] = list("{0:04d}-01-01_00:00:00".format(t).ljust(64))
 
