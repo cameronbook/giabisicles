@@ -38,7 +38,6 @@ else:
     taf0hat_restart = None
     ic = netCDF4.Dataset(options.initialConditionFile, 'r')
     thk_Start = ic.variables['thk'][:]
-    print "thk_Start =", thk_Start
     bas_Start = ic.variables['bas'][:]  # open special init cond file for original thk_start and bas_start
     ic.close()
 
@@ -62,10 +61,10 @@ assert nt*dt==T, "dt does not divide evenly into duration."
 
 print "Using dt = {} years".format(dt)
 
-ekwargs = {'u2'  :  3.e18,
-           'u1'  :  2.e19,
+ekwargs = {'u2'  :  1.e18,
+           'u1'  :  1.e19,
            'h'   :  200000.,
-           'D'   :  13e23}
+           'D'   :  4.94e22}
 
 maliForcing = giascript.maliForcing(thk_Start, bas_Start, thk_End, bas_End, nt)
 buelerflux = giascript.BuelerTopgFlux(x_data, y_data, './', options.inputFile, 'blah', nt, dt, ekwargs, fac=2, read='netcdf_read', U0=Uhatn_restart, taf0=taf0hat_restart, maliForcing=maliForcing)
@@ -82,13 +81,16 @@ yout[:] = y_data
 tout = fout.createVariable('Time', 'f', ('Time',))
 tout.units='year'
 up_out = fout.createVariable('uplift', 'f', ('Time', 'y','x'))
+uplift_rate = fout.createVariable('uplift_rate', 'f', ('Time', 'y','x'))
 
 
 for i in range(nt):
     print "Starting time step {}".format(i)
     buelerflux._update_Udot(i)  # this actually runs the GIA model, using the MALI data from the iceload.nc file
-    up_out[i,:,:] = buelerflux.ifft2andcrop(buelerflux.Uhatn)
-    tout[i]=i
+
+up_out[0,:,:] = buelerflux.ifft2andcrop(buelerflux.Uhatn)
+uplift_rate[0,:,:] = buelerflux.Udot
+tout[0] = T
 
 fout.close()
 
