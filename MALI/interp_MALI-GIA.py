@@ -35,8 +35,6 @@ import scipy.spatial
 import time
 from datetime import datetime
 
-np.set_printoptions(threshold=np.nan)
-
 print "== Gathering information.  (Invoke with --help for more details. All arguments are optional)\n"
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.description = __doc__
