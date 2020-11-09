@@ -35,7 +35,7 @@ import scipy.spatial
 import time
 from datetime import datetime
 
-print "== Gathering information.  (Invoke with --help for more details. All arguments are optional)\n"
+print ("== Gathering information.  (Invoke with --help for more details. All arguments are optional)\n")
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.description = __doc__
 parser.add_argument("-d", "--destination", dest="destination", choices=('m','g'), help="flag to indicate if the MALI grid or the GIA grid is the destination: 'g' or 'm'.  Required.", metavar="DESTINATION")
@@ -49,14 +49,14 @@ options = parser.parse_args()
 
 
 
-print "  MPAS file:  " + options.mpasFile
-print "  GIA file:  " + options.giaFile
+print ("  MPAS file:  " + options.mpasFile)
+print ("  GIA file:  " + options.giaFile)
 if options.destination == 'g':
-    print "Interpolating ice sheet data from MALI file to a new file on the GIA grid."
+    print ("Interpolating ice sheet data from MALI file to a new file on the GIA grid.")
 elif options.destination == 'm':
-    print "Interpolating uplift data from GIA file to a new file on the MALI grid."
+    print ("Interpolating uplift data from GIA file to a new file on the MALI grid.")
 
-print '' # make a space in stdout before further output
+print ('') # make a space in stdout before further output
 
 
 #----------------------------
@@ -74,25 +74,25 @@ def delaunay_interp_weights(xy, uv, exteriorThreshold=None):
     d = 2 # number of dims
 
     if xy.shape[0] > 2**24-1:
-       print "WARNING: The source file contains more than 2^24-1 (16,777,215) points due to a limitation in older versions of Qhull (see: https://mail.scipy.org/pipermail/scipy-user/2015-June/036598.html).  Delaunay creation may fail if Qhull being linked by scipy.spatial is older than v2015.0.1 2015/8/31."
-       print "scipy version=", scipy.version.full_version
+       print ("WARNING: The source file contains more than 2^24-1 (16,777,215) points due to a limitation in older versions of Qhull (see: https://mail.scipy.org/pipermail/scipy-user/2015-June/036598.html).  Delaunay creation may fail if Qhull being linked by scipy.spatial is older than v2015.0.1 2015/8/31.")
+       print ("scipy version=", scipy.version.full_version)
 
     tri = scipy.spatial.Delaunay(xy)
-    print "    Delaunay triangulation complete."
+    print ("    Delaunay triangulation complete.")
     simplex = tri.find_simplex(uv)
-    print "    find_simplex complete."
+    print ("    find_simplex complete.")
     vertices = np.take(tri.simplices, simplex, axis=0)
-    print "    identified vertices."
+    print ("    identified vertices.")
     temp = np.take(tri.transform, simplex, axis=0)
-    print "    np.take complete."
+    print ("    np.take complete.")
     delta = uv - temp[:, d]
     bary = np.einsum('njk,nk->nj', temp[:, :d, :], delta)
-    print "    calculating bary complete."
+    print ("    calculating bary complete.")
     wts = np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
 
     # Now figure out if there is any extrapolation.
     # ---
-    print "    Removing points outside of the union of the two meshes."
+    print ("    Removing points outside of the union of the two meshes.")
     # Always exclude points outside of convex hull
     outsideMask = tri.find_simplex(uv) < 0
 
@@ -108,7 +108,7 @@ def delaunay_interp_weights(xy, uv, exteriorThreshold=None):
 
     nExtrap = len(outsideInd[0])
     if nExtrap > 0:
-       print "    Found {} points outside of union of domains.".format(nExtrap)
+       print ("    Found {} points outside of union of domains.".format(nExtrap))
 
     return vertices, wts, outsideInd
 
@@ -137,7 +137,7 @@ def copy_mpas_mesh_vars(filein, fileout):
 # ============================================
 # Copy over all of the required grid variables to the new file
 # ============================================
-   #print "Beginning to copy mesh variables to output file."
+   #print ("Beginning to copy mesh variables to output file.")
    vars2copy = ['latCell', 'lonCell', 'xCell', 'yCell', 'zCell', 'indexToCellID', 'latEdge', 'lonEdge', 'xEdge', 'yEdge', 'zEdge', 'indexToEdgeID', 'latVertex', 'lonVertex', 'xVertex', 'yVertex', 'zVertex', 'indexToVertexID', 'cellsOnEdge', 'nEdgesOnCell', 'nEdgesOnEdge', 'edgesOnCell', 'edgesOnEdge', 'weightsOnEdge', 'dvEdge', 'dcEdge', 'angleEdge', 'areaCell', 'areaTriangle', 'cellsOnCell', 'verticesOnCell', 'verticesOnEdge', 'edgesOnVertex', 'cellsOnVertex', 'kiteAreasOnVertex']
    # Add these optional fields if they exist in the input file
    #for optionalVar in ['meshDensity', 'gridSpacing', 'cellQuality', 'triangleQuality', 'triangleAngleQuality', 'obtuseTriangle']:
@@ -145,8 +145,8 @@ def copy_mpas_mesh_vars(filein, fileout):
    #      vars2copy.append(optionalVar)
 
    #for varname in vars2copy:
-   #   print "-",
-   #print "|"
+   #   print ("-",)
+   #print ("|")
    for varname in vars2copy:
       thevar = filein.variables[varname]
       datatype = thevar.dtype
@@ -160,21 +160,21 @@ def copy_mpas_mesh_vars(filein, fileout):
    fileout.is_periodic = "NO"
    # write out the mesh to file before proceeding
    fileout.sync()
-   print "|"
-   print "Finished copying mesh variables to output file.\n"
+   print ("|")
+   print ("Finished copying mesh variables to output file.\n")
 # ------------
 
 
-print "=================="
-print 'Gathering coordinate information from input and output files.'
+print ("==================")
+print ('Gathering coordinate information from input and output files.')
 
 # get needed info from MPAS file
 MPASfile = netCDF4.Dataset(options.mpasFile,'r')
 MPASfile.set_auto_mask(False) # this obscure command prevents the netCDF4 module from returning variables as a numpy Masked Array type and ensures they are always plain old ndarrays, which is expected by the interpolation code
 xCell = MPASfile.variables['xCell'][:]
-#print 'xCell min/max:', xCell.min(), xCell.max()
+#print ('xCell min/max:', xCell.min(), xCell.max())
 yCell = MPASfile.variables['yCell'][:]
-#print 'yCell min/max:', yCell.min(), yCell.max()
+#print ('yCell min/max:', yCell.min(), yCell.max())
 nCells = len(MPASfile.dimensions['nCells'])
 # build array form of MPAS x, y
 mpasXY = np.vstack((xCell[:], yCell[:])).transpose()
@@ -190,7 +190,7 @@ y = giaFile.variables['y'][:]
 giaXY = np.zeros([Xi.shape[0]*Xi.shape[1],2])
 giaXY[:,0] = Yi.flatten()
 giaXY[:,1] = Xi.flatten()
-#print giaXY
+#print (giaXY)
 
 # ==========================
 if options.destination== 'g':
@@ -208,20 +208,20 @@ if options.destination== 'g':
     thk = fout.createVariable('thk', 'f', ('Time', 'y','x'))
     bas = fout.createVariable('bas', 'f', ('Time', 'y','x'))
 
-    print "Creating interpolation object"
+    print ("Creating interpolation object")
     maxDist = MPASfile.variables['dcEdge'][:].max() * 1.0
     vtx, wts, outsideIndx = delaunay_interp_weights(mpasXY, giaXY, maxDist)
 
-    print "Begin interpolation"
+    print ("Begin interpolation")
     nt = len(MPASfile.dimensions['Time'])
     if 'daysSinceStart' in MPASfile.variables:
        years = MPASfile.variables['daysSinceStart'][:]/365.0
     else:
        # could use xtime if available...
        years = np.arange(nt)
-       print "NOTE: No 'daysSinceStart' variable found.  Assuming that time levels represent integer years."
+       print ("NOTE: No 'daysSinceStart' variable found.  Assuming that time levels represent integer years.")
     for t in range(nt):
-        #print "Time {} = year {}".format(t, years[t])
+        #print ("Time {} = year {}".format(t, years[t]))
         thk[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['thickness'][t,:]), (ny,nx))
         bas[t,:,:] = np.reshape(delaunay_interpolate(MPASfile.variables['bedTopography'][t,:]), (ny,nx))
         tout[t] = t
@@ -245,16 +245,16 @@ if options.destination == 'm':
     bedTopo = fout.createVariable('bedTopography', 'd', ('Time', 'nCells'))
     bedUplift = fout.createVariable('upliftRate', 'd', ('Time', 'nCells'))
 
-    print "Creating interpolation object"
+    print ("Creating interpolation object")
     vtx, wts, outsideIndx = delaunay_interp_weights(giaXY, mpasXY)
 
     nt = len(giaFile.dimensions['Time'])
     years = giaFile.variables['Time'][:]
     bedTopoBase = MPASfile.variables['bedTopography'][0,:]  # Note using the 0 time level from the MPAS file!
-    print "Base bedTopography min={}, max={}".format(bedTopoBase.min(), bedTopoBase.max())
-    print "Begin interpolation"
+    print ("Base bedTopography min={}, max={}".format(bedTopoBase.min(), bedTopoBase.max()))
+    print ("Begin interpolation")
     for t in range(nt):
-        print "   Time {} = year {}".format(t, years[t])
+        print ("   Time {} = year {}".format(t, years[t]))
         bedTopo[t,:] = delaunay_interpolate(giaFile.variables['uplift'][t,:]) + bedTopoBase
         bedUplift[t,:] = delaunay_interpolate(giaFile.variables['uplift_rate'][t,:])
         bedUplift[t,:] = bedUplift[t,:] / (365*24*3600) # convert m/yr to m/s
@@ -270,4 +270,4 @@ if options.destination == 'm':
 MPASfile.close()
 giaFile.close()
 
-print '\nInterpolation completed.'
+print ('\nInterpolation completed.')
